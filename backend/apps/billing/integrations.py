@@ -314,13 +314,13 @@ def redeem_discounts(
     Record discount usage once an invoice is confirmed.
     Usage is recorded at invoice CONFIRM.
 
-    Deduplicates discount_ids preserving order.
+    Deduplicates discount_ids in sorted ascending order to prevent deadlocks.
     When USE_REAL_DISCOUNT_USAGE is True, invokes apps.catalog.services.record_discount_usage
     once per discount ID.
     Returns:
         {"all_recorded": bool, "failed_ids": [int, ...]}
     """
-    distinct_ids = list(dict.fromkeys(discount_ids))
+    distinct_ids = sorted(set(discount_ids))
 
     if USE_REAL_DISCOUNT_USAGE:
         from apps.catalog.services import record_discount_usage

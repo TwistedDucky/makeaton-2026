@@ -1,15 +1,10 @@
-import sys
-import types
-from apps import catalog
-if not hasattr(catalog, "services"):
-    catalog.services = types.ModuleType("apps.catalog.services")
-    sys.modules["apps.catalog.services"] = catalog.services
 from dataclasses import dataclass
-import inspect
-import threading
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+import inspect
+import sys
+import threading
+from unittest.mock import MagicMock, call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -1226,34 +1221,466 @@ class Task14HardeningTests(TestCase):
             self.assertTrue(res["all_recorded"])
             self.assertEqual(res["failed_ids"], [])
 
-    @patch("apps.catalog.services.record_discount_usage", create=True)
-    def test_redeem_discounts_deduplicates_and_records(self, mock_record):
+    def test_redeem_discounts_deduplicates_and_records(self):
         from apps.billing import integrations
 
-        mock_record.return_value = True
+        mock_catalog = MagicMock()
+        mock_catalog.record_discount_usage.return_value = True
 
-        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
-            res = integrations.redeem_discounts([5, 10, 5, 20, 10], invoice_id=101, subscription_id=505)
+        with patch.dict(sys.modules, {"apps.catalog.services": mock_catalog}):
+            with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+                res = integrations.redeem_discounts([5, 10, 5, 20, 10], invoice_id=101, subscription_id=505)
 
-        # Called once per distinct id: 5, 10, 20 (preserving order)
-        self.assertEqual(mock_record.call_count, 3)
-        mock_record.assert_any_call(5, 101, 505)
-        mock_record.assert_any_call(10, 101, 505)
-        mock_record.assert_any_call(20, 101, 505)
+        # Called once per distinct id in ascending sorted order: 5, 10, 20
+        self.assertEqual(mock_catalog.record_discount_usage.call_count, 3)
+        self.assertEqual(
+            mock_catalog.record_discount_usage.call_args_list,
+            [
+                call(5, 101, 505),
+                call(10, 101, 505),
+                call(20, 101, 505),
+            ],
+        )
         self.assertTrue(res["all_recorded"])
         self.assertEqual(res["failed_ids"], [])
 
-    @patch("apps.catalog.services.record_discount_usage", create=True)
-    def test_redeem_discounts_partial_failure_reports_failed_ids(self, mock_record):
+    def test_redeem_discounts_sorts_ids_ascending(self):
+        from apps.billing import integrations
+
+        mock_catalog = MagicMock()
+        mock_catalog.record_discount_usage.return_value = True
+
+        with patch.dict(sys.modules, {"apps.catalog.services": mock_catalog}):
+            with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+                res = integrations.redeem_discounts([3, 1, 2], invoice_id=101, subscription_id=505)
+
+        self.assertEqual(
+            mock_catalog.record_discount_usage.call_args_list,
+            [
+                call(1, 101, 505),
+                call(2, 101, 505),
+                call(3, 101, 505),
+            ],
+        )
+        self.assertTrue(res["all_recorded"])
+        self.assertEqual(res["failed_ids"], [])
+
+    def test_redeem_discounts_partial_failure_reports_failed_ids(self):
         from apps.billing import integrations
 
         def fake_record(d_id, inv_id, sub_id):
             return d_id != 10
 
-        mock_record.side_effect = fake_record
+        mock_catalog = MagicMock()
+        mock_catalog.record_discount_usage.side_effect = fake_record
 
-        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
-            res = integrations.redeem_discounts([5, 10, 20], invoice_id=102, subscription_id=506)
+        with patch.dict(sys.modules, {"apps.catalog.services": mock_catalog}):
+            with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+                res = integrations.redeem_discounts([5, 10, 20], invoice_id=102, subscription_id=506)
 
         self.assertFalse(res["all_recorded"])
         self.assertEqual(res["failed_ids"], [10])
+
+
+# =============================================================================
+# Confirm and Cancel Invoice Service Tests (Task 3)
+# =============================================================================
+class ConfirmAndCancelServiceTests(TestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            email="service_test_customer@example.com",
+            password="testpassword123",
+            role=User.Role.CUSTOMER,
+        )
+
+    def _create_invoice(
+        self,
+        subscription_id=200,
+        status=Invoice.Status.DRAFT,
+        subtotal=Decimal("100.00"),
+        discount_total=Decimal("0.00"),
+        tax_total=Decimal("10.00"),
+        total=Decimal("110.00"),
+        amount_paid=Decimal("0.00"),
+    ):
+        today = timezone.localdate()
+        return Invoice.objects.create(
+            customer=self.customer,
+            subscription_id=subscription_id,
+            status=status,
+            subtotal=subtotal,
+            discount_total=discount_total,
+            tax_total=tax_total,
+            total=total,
+            amount_paid=amount_paid,
+            issue_date=today,
+            due_date=today + timedelta(days=14),
+            period_start=today,
+            period_end=today + timedelta(days=30),
+        )
+
+    def test_confirm_draft_with_no_discounts(self):
+        from apps.billing import integrations
+        from apps.billing.services import ConfirmResult, confirm_invoice
+
+        invoice = self._create_invoice()
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            product_name="Product No Discount",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("0.00"),
+            tax_amount=Decimal("10.00"),
+        )
+
+        with patch.object(integrations, "redeem_discounts") as mock_redeem:
+            result = confirm_invoice(invoice)
+
+        self.assertIsInstance(result, ConfirmResult)
+        self.assertFalse(result.amounts_changed)
+        self.assertEqual(result.invoice.status, Invoice.Status.CONFIRMED)
+        mock_redeem.assert_not_called()
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
+
+    def test_confirm_draft_accepts_pk(self):
+        from apps.billing.services import ConfirmResult, confirm_invoice
+
+        invoice = self._create_invoice()
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            product_name="Product",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("0.00"),
+            tax_amount=Decimal("10.00"),
+        )
+
+        result = confirm_invoice(invoice.id)
+        self.assertIsInstance(result, ConfirmResult)
+        self.assertEqual(result.invoice.id, invoice.id)
+        self.assertEqual(result.invoice.status, Invoice.Status.CONFIRMED)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
+
+    def test_confirm_draft_with_discounts_refuses_when_real_discount_usage_is_false(self):
+        from apps.billing import integrations
+        from apps.billing.services import confirm_invoice
+
+        invoice = self._create_invoice(discount_total=Decimal("10.00"), total=Decimal("100.00"))
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            product_name="Discounted Line",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("10.00"),
+            tax_amount=Decimal("10.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=invoice,
+            discount_id=1,
+            amount=Decimal("10.00"),
+        )
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", False):
+            with patch.object(integrations, "redeem_discounts") as mock_redeem:
+                with self.assertRaises(ValidationError) as ctx:
+                    confirm_invoice(invoice)
+                self.assertIn("USE_REAL_DISCOUNT_USAGE is False", str(ctx.exception))
+                mock_redeem.assert_not_called()
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.DRAFT)
+
+    def test_confirm_draft_with_discounts_succeeds_when_real_discount_usage_is_true(self):
+        from apps.billing import integrations
+        from apps.billing.services import ConfirmResult, confirm_invoice
+
+        invoice = self._create_invoice(discount_total=Decimal("35.00"), total=Decimal("75.00"))
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            product_name="Multi Discount Line",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("35.00"),
+            tax_amount=Decimal("10.00"),
+        )
+        InvoiceDiscount.objects.create(invoice=invoice, discount_id=20, amount=Decimal("10.00"))
+        InvoiceDiscount.objects.create(invoice=invoice, discount_id=5, amount=Decimal("15.00"))
+        InvoiceDiscount.objects.create(invoice=invoice, discount_id=10, amount=Decimal("10.00"))
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(
+                integrations,
+                "redeem_discounts",
+                return_value={"all_recorded": True, "failed_ids": []},
+            ) as mock_redeem:
+                result = confirm_invoice(invoice)
+
+        self.assertIsInstance(result, ConfirmResult)
+        self.assertFalse(result.amounts_changed)
+        self.assertEqual(result.invoice.status, Invoice.Status.CONFIRMED)
+        # Redeemed with sorted ascending IDs [5, 10, 20]
+        mock_redeem.assert_called_once_with([5, 10, 20], invoice.id, invoice.subscription_id)
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
+
+    def test_confirm_reprices_and_retries_on_discount_failure(self):
+        from apps.billing import integrations
+        from apps.billing.services import ConfirmResult, confirm_invoice
+
+        invoice = self._create_invoice(
+            subtotal=Decimal("100.00"),
+            discount_total=Decimal("20.00"),
+            tax_total=Decimal("8.00"),
+            total=Decimal("88.00"),
+        )
+        line = InvoiceLine.objects.create(
+            invoice=invoice,
+            product_id=10,
+            product_name="Product",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("20.00"),
+            tax_amount=Decimal("8.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=invoice,
+            discount_id=1,
+            amount=Decimal("20.00"),
+        )
+
+        priced_return = {
+            "lines": [
+                {
+                    "product_id": 10,
+                    "variant_id": None,
+                    "product_name": "Product",
+                    "quantity": 1,
+                    "unit_price": Decimal("100.00"),
+                    "discount_id": None,
+                    "discount_amount": Decimal("0.00"),
+                    "tax_amount": Decimal("10.00"),
+                    "tax_id": None,
+                    "line_total": Decimal("110.00"),
+                }
+            ],
+            "discount_lines": [],
+            "totals": {
+                "subtotal": Decimal("100.00"),
+                "discount_total": Decimal("0.00"),
+                "tax_total": Decimal("10.00"),
+                "total": Decimal("110.00"),
+            },
+        }
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(integrations, "USE_REAL_PRICING", True):
+                with patch.object(
+                    integrations,
+                    "redeem_discounts",
+                    return_value={"all_recorded": False, "failed_ids": [1]},
+                ) as mock_redeem:
+                    with patch.object(
+                        integrations,
+                        "price_invoice_lines",
+                        return_value=priced_return,
+                    ) as mock_price:
+                        result = confirm_invoice(invoice)
+
+        self.assertIsInstance(result, ConfirmResult)
+        self.assertTrue(result.amounts_changed)
+        self.assertEqual(result.invoice.status, Invoice.Status.CONFIRMED)
+        self.assertEqual(result.invoice.total, Decimal("110.00"))
+        self.assertEqual(result.invoice.discount_total, Decimal("0.00"))
+        self.assertEqual(result.invoice.tax_total, Decimal("10.00"))
+        self.assertEqual(result.invoice.discounts.count(), 0)
+
+        # Stored unit price was passed to price_invoice_lines
+        mock_price.assert_called_once()
+        passed_lines = mock_price.call_args[0][0]
+        self.assertEqual(passed_lines[0]["unit_price"], Decimal("100.00"))
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
+        self.assertEqual(invoice.total, Decimal("110.00"))
+        line.refresh_from_db()
+        self.assertEqual(line.discount_amount, Decimal("0.00"))
+        self.assertEqual(line.tax_amount, Decimal("10.00"))
+
+    def test_confirm_reprice_retry_also_fails_raises_validation_error_and_rolls_back(self):
+        from apps.billing import integrations
+        from apps.billing.services import confirm_invoice
+
+        invoice = self._create_invoice(
+            subtotal=Decimal("100.00"),
+            discount_total=Decimal("20.00"),
+            tax_total=Decimal("8.00"),
+            total=Decimal("88.00"),
+        )
+        line = InvoiceLine.objects.create(
+            invoice=invoice,
+            product_id=10,
+            product_name="Product",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("20.00"),
+            tax_amount=Decimal("8.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=invoice,
+            discount_id=1,
+            amount=Decimal("20.00"),
+        )
+
+        priced_return = {
+            "lines": [
+                {
+                    "product_id": 10,
+                    "variant_id": None,
+                    "product_name": "Product",
+                    "quantity": 1,
+                    "unit_price": Decimal("100.00"),
+                    "discount_id": 2,
+                    "discount_amount": Decimal("10.00"),
+                    "tax_amount": Decimal("9.00"),
+                    "tax_id": None,
+                    "line_total": Decimal("99.00"),
+                }
+            ],
+            "discount_lines": [
+                {
+                    "discount_id": 2,
+                    "description": "Discount 2",
+                    "amount": Decimal("10.00"),
+                    "line_index": 0,
+                }
+            ],
+            "totals": {
+                "subtotal": Decimal("100.00"),
+                "discount_total": Decimal("10.00"),
+                "tax_total": Decimal("9.00"),
+                "total": Decimal("99.00"),
+            },
+        }
+
+        # Both redeem attempts fail
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(integrations, "USE_REAL_PRICING", True):
+                with patch.object(
+                    integrations,
+                    "redeem_discounts",
+                    side_effect=[
+                        {"all_recorded": False, "failed_ids": [1]},
+                        {"all_recorded": False, "failed_ids": [2]},
+                    ],
+                ):
+                    with patch.object(
+                        integrations,
+                        "price_invoice_lines",
+                        return_value=priced_return,
+                    ):
+                        with self.assertRaises(ValidationError) as ctx:
+                            confirm_invoice(invoice)
+                        self.assertIn("discount no longer available, please retry", str(ctx.exception))
+
+        # Check that DB was rolled back cleanly to draft state with original amounts
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.DRAFT)
+        self.assertEqual(invoice.total, Decimal("88.00"))
+        self.assertEqual(invoice.discount_total, Decimal("20.00"))
+        self.assertEqual(invoice.discounts.count(), 1)
+        self.assertEqual(invoice.discounts.first().discount_id, 1)
+        line.refresh_from_db()
+        self.assertEqual(line.discount_amount, Decimal("20.00"))
+
+    def test_confirm_fails_when_reprice_needed_but_use_real_pricing_is_false(self):
+        from apps.billing import integrations
+        from apps.billing.services import confirm_invoice
+
+        invoice = self._create_invoice(
+            subtotal=Decimal("100.00"),
+            discount_total=Decimal("20.00"),
+            tax_total=Decimal("8.00"),
+            total=Decimal("88.00"),
+        )
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            product_id=10,
+            product_name="Product",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            discount_amount=Decimal("20.00"),
+            tax_amount=Decimal("8.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=invoice,
+            discount_id=1,
+            amount=Decimal("20.00"),
+        )
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(integrations, "USE_REAL_PRICING", False):
+                with patch.object(
+                    integrations,
+                    "redeem_discounts",
+                    return_value={"all_recorded": False, "failed_ids": [1]},
+                ):
+                    with self.assertRaises(ValidationError) as ctx:
+                        confirm_invoice(invoice)
+                    self.assertIn("USE_REAL_PRICING is False", str(ctx.exception))
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.DRAFT)
+        self.assertEqual(invoice.total, Decimal("88.00"))
+
+    def test_confirm_non_draft_raises_illegal_status_transition_error(self):
+        from apps.billing.models import IllegalStatusTransitionError
+        from apps.billing.services import confirm_invoice
+
+        for idx, non_draft_status in enumerate([
+            Invoice.Status.CONFIRMED,
+            Invoice.Status.PAID,
+            Invoice.Status.CANCELLED,
+        ]):
+            invoice = self._create_invoice(subscription_id=300 + idx, status=non_draft_status)
+            with self.assertRaises(IllegalStatusTransitionError) as ctx:
+                confirm_invoice(invoice)
+            self.assertIn(f"current status is '{non_draft_status}'", str(ctx.exception))
+            self.assertIn(f"only '{Invoice.Status.DRAFT}' invoices can be confirmed", str(ctx.exception))
+
+    def test_cancel_invoice_service(self):
+        from apps.billing.models import IllegalStatusTransitionError
+        from apps.billing.services import cancel_invoice
+
+        # 1. Cancel DRAFT invoice
+        draft_inv = self._create_invoice(subscription_id=401, status=Invoice.Status.DRAFT)
+        res_draft = cancel_invoice(draft_inv)
+        self.assertEqual(res_draft.status, Invoice.Status.CANCELLED)
+        draft_inv.refresh_from_db()
+        self.assertEqual(draft_inv.status, Invoice.Status.CANCELLED)
+
+        # 2. Cancel CONFIRMED invoice via pk
+        conf_inv = self._create_invoice(subscription_id=402, status=Invoice.Status.CONFIRMED)
+        res_conf = cancel_invoice(conf_inv.id)
+        self.assertEqual(res_conf.status, Invoice.Status.CANCELLED)
+        conf_inv.refresh_from_db()
+        self.assertEqual(conf_inv.status, Invoice.Status.CANCELLED)
+
+        # 3. Blocked when amount_paid > 0
+        part_paid = self._create_invoice(
+            subscription_id=403,
+            status=Invoice.Status.CONFIRMED,
+            amount_paid=Decimal("25.00"),
+        )
+        with self.assertRaises(IllegalStatusTransitionError) as ctx:
+            cancel_invoice(part_paid)
+        self.assertIn("amount_paid = 25.00", str(ctx.exception))
+        part_paid.refresh_from_db()
+        self.assertEqual(part_paid.status, Invoice.Status.CONFIRMED)
+
+        # 4. Blocked if already CANCELLED
+        with self.assertRaises(IllegalStatusTransitionError):
+            cancel_invoice(draft_inv)
