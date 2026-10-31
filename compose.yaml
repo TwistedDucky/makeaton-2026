@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: hackathon
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d hackathon"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8001:8000"
+    environment:
+      DB_NAME: hackathon
+      DB_USER: appuser
+      DB_PASSWORD: ${DB_PASSWORD:-devpassword}
+      DB_HOST: db
+      DB_PORT: "5432"
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-development-only}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  frontend_node_modules:

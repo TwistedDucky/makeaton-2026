@@ -1,0 +1,7 @@
+Django
+djangorestframework
+django-cors-headers
+psycopg[binary]
+django-filter
+drf-spectacular
+django-phonenumber-field[phonenumbers]
