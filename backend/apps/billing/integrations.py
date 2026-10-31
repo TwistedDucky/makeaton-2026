@@ -6,21 +6,22 @@ with external domains (apps.subscriptions, apps.catalog, apps.sales).
 
 Integration Architecture & Migration Path:
 ------------------------------------------
-USE_REAL_SERVICES is a feature flag. When False (current state), this module
-returns realistic mock data conforming strictly to agreed teammate contracts.
-When True (future integration task once teammates merge their service modules),
-the functions in this module will import and invoke the real services:
-- apps.subscriptions.services.get_due_subscriptions
-- apps.subscriptions.services.advance_next_billing_date
-- apps.catalog.services.price_invoice (once implemented by Member 2)
-- apps.catalog.services.record_discount_usage (once implemented by Member 2)
+USE_REAL_SUBSCRIPTIONS controls whether get_due_subscriptions and
+advance_next_billing_date call Member 3's real implementation in
+apps.subscriptions.services or return local typed stubs.
+
+USE_REAL_PRICING controls whether price_invoice_lines and redeem_discounts
+call Member 2's pricing service in apps.catalog.services (not yet implemented)
+or return local typed stubs.
 """
 
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
-USE_REAL_SERVICES = False
+USE_REAL_SUBSCRIPTIONS = True  # True = call apps.subscriptions.services
+USE_REAL_PRICING = False       # Member 2's service doesn't exist yet
+
 TWOPLACES = Decimal("0.01")
 
 
@@ -53,53 +54,74 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
         }
     ]
     """
-    if USE_REAL_SERVICES:
-        # TODO: Wire to `from apps.subscriptions.services import get_due_subscriptions as _get_due`
-        pass
+    if USE_REAL_SUBSCRIPTIONS:
+        from apps.subscriptions.services import (
+            get_due_subscriptions as _real_get_due_subscriptions,
+        )
+        raw_subs = _real_get_due_subscriptions(target_date)
+    else:
+        billing_date = target_date or date.today()
+        period_start = billing_date.replace(day=1)
+        period_end = (period_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
-    billing_date = target_date or date.today()
-    period_start = billing_date.replace(day=1)
-    period_end = (period_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        raw_subs = [
+            {
+                "id": 101,
+                "customer_id": 1,
+                "period_start": period_start,
+                "period_end": period_end,
+                "lines": [
+                    {
+                        "product_id": 1,
+                        "variant_id": 10,
+                        "product_name": "Premium Cloud Suite - 50GB",
+                        "quantity": 1,
+                        "unit_price": Decimal("99.00"),
+                    },
+                    {
+                        "product_id": 2,
+                        "variant_id": None,
+                        "product_name": "Priority Support Add-on",
+                        "quantity": 1,
+                        "unit_price": Decimal("20.00"),
+                    },
+                ],
+            },
+            {
+                "id": 102,
+                "customer_id": 2,
+                "period_start": period_start,
+                "period_end": period_end,
+                "lines": [
+                    {
+                        "product_id": 3,
+                        "variant_id": None,
+                        "product_name": "Standard Plan Monthly",
+                        "quantity": 1,
+                        "unit_price": Decimal("30.00"),
+                    }
+                ],
+            },
+        ]
 
-    return [
-        {
-            "id": 101,
-            "customer_id": 1,
-            "period_start": period_start,
-            "period_end": period_end,
-            "lines": [
-                {
-                    "product_id": 1,
-                    "variant_id": 10,
-                    "product_name": "Premium Cloud Suite - 50GB",
-                    "quantity": 1,
-                    "unit_price": Decimal("99.00"),
-                },
-                {
-                    "product_id": 2,
-                    "variant_id": None,
-                    "product_name": "Priority Support Add-on",
-                    "quantity": 1,
-                    "unit_price": Decimal("20.00"),
-                },
-            ],
-        },
-        {
-            "id": 102,
-            "customer_id": 2,
-            "period_start": period_start,
-            "period_end": period_end,
-            "lines": [
-                {
-                    "product_id": 3,
-                    "variant_id": None,
-                    "product_name": "Standard Plan Monthly",
-                    "quantity": 1,
-                    "unit_price": Decimal("30.00"),
-                }
-            ],
-        },
-    ]
+    normalized_subs: List[Dict[str, Any]] = []
+    for sub in raw_subs:
+        sub_id = sub.get("id")
+        period_start = sub.get("period_start")
+        period_end = sub.get("period_end")
+
+        if not period_start or not period_end:
+            raise ValueError(
+                f"Subscription {sub_id} missing period_start or period_end"
+            )
+
+        lines = sub.get("lines") or []
+        for line in lines:
+            line["variant_id"] = line.get("variant_id")
+
+        normalized_subs.append(sub)
+
+    return normalized_subs
 
 
 def advance_next_billing_date(subscription_id: int) -> Dict[str, Any]:
@@ -118,9 +140,13 @@ def advance_next_billing_date(subscription_id: int) -> Dict[str, Any]:
         "status": str,  # e.g. "ACTIVE" or "CLOSED"
     }
     """
-    if USE_REAL_SERVICES:
-        # TODO: Wire to `from apps.subscriptions.services import advance_next_billing_date as _advance`
-        pass
+    if USE_REAL_SUBSCRIPTIONS:
+        from apps.subscriptions.services import (
+            advance_next_billing_date as _real_advance_next_billing_date,
+        )
+        res = dict(_real_advance_next_billing_date(subscription_id))
+        res["status"] = str(res.get("status", "")).upper()
+        return res
 
     return {
         "subscription_id": subscription_id,
@@ -135,6 +161,8 @@ def price_invoice_lines(
 ) -> Dict[str, Any]:
     """
     Unified pricing adapter providing pure calculation for invoice lines.
+
+    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
 
     Contract with Member 2 (apps.catalog):
     - Pure Calculation: MUST NOT record DiscountUsage or mutate database state.
@@ -175,8 +203,9 @@ def price_invoice_lines(
         }
     }
     """
-    if USE_REAL_SERVICES:
-        # TODO: Wire to Member 2's `apps.catalog.services.price_invoice`
+    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
+    if USE_REAL_PRICING:
+        # TODO: Wire to Member 2's `apps.catalog.services.price_invoice` once implemented.
         pass
 
     priced_lines = []
@@ -237,6 +266,8 @@ def redeem_discounts(
     """
     Record discount usage once an invoice is confirmed.
 
+    # STUB: returns FAKE confirmation. Must not be used for real invoices.
+
     Contract with Member 2 (apps.catalog):
     - Separate State Mutation: Records DiscountUsage rows (fields: discount, invoice_id, subscription_id)
       and increments Discount.used_count.
@@ -251,7 +282,8 @@ def redeem_discounts(
         }
     ]
     """
-    if USE_REAL_SERVICES:
+    # STUB: returns FAKE confirmation. Must not be used for real invoices.
+    if USE_REAL_PRICING:
         # TODO: Wire to Member 2's `apps.catalog.services.record_discount_usage`
         pass
 
@@ -263,3 +295,57 @@ def redeem_discounts(
         }
         for d_id in discount_ids
     ]
+
+
+# ==============================================================================
+# BACKWARD COMPATIBILITY STUBS (Member 2 Catalog / Tax / Discounts)
+# ==============================================================================
+
+def calculate_tax(line: Dict[str, Any]) -> Decimal:
+    """
+    Calculate tax amount for an invoice line item.
+    Tax is calculated on the discounted amount (line_subtotal - discount_amount).
+
+    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
+    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
+    """
+    quantity = line.get("quantity", 1)
+    unit_price = line.get("unit_price", Decimal("0.00"))
+    discount = line.get("discount_amount", Decimal("0.00"))
+    line_subtotal = Decimal(quantity) * Decimal(unit_price)
+    discounted_subtotal = max(Decimal("0.00"), line_subtotal - Decimal(discount))
+    tax_rate = Decimal("0.10")
+    return (discounted_subtotal * tax_rate).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def get_applicable_discounts(subscription_id: int) -> List[Dict[str, Any]]:
+    """
+    Retrieve active discounts and promotional codes applicable to a subscription.
+
+    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
+    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
+    """
+    return [
+        {
+            "id": 1,
+            "code": "EARLYBIRD10",
+            "description": "10% Early Bird Promotional Discount",
+            "discount_type": "percentage",
+            "value": Decimal("10.00"),
+            "applicable_amount": Decimal("10.00"),
+        }
+    ]
+
+
+def redeem(discount_id: int) -> Dict[str, Any]:
+    """
+    Mark a promotional code or discount as redeemed/applied to prevent re-use.
+
+    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
+    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
+    """
+    return {
+        "discount_id": discount_id,
+        "redeemed": True,
+        "message": f"Discount {discount_id} marked as redeemed.",
+    }

@@ -173,15 +173,16 @@ def convert_quotation_to_subscription(quotation_id: int, start_date: date = None
 # MEMBER 4 INVOICE GENERATION INTEGRATIONS
 # ==============================================================================
 
-def get_due_subscriptions(target_date: date) -> list[dict]:
+def get_due_subscriptions(target_date: date = None) -> list[dict]:
     """
     Returns active subscriptions due for billing on or before target_date.
     Exact contract shape requested by Member 4.
     """
+    eval_date = target_date or timezone.now().date()
     due_subs = (
         Subscription.objects.filter(
             status=Subscription.Status.ACTIVE,
-            next_billing_date__lte=target_date,
+            next_billing_date__lte=eval_date,
         )
         .select_related("customer", "plan")
         .prefetch_related("lines__product", "lines__variant")
