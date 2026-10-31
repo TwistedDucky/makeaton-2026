@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.utils import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
@@ -30,6 +31,7 @@ class PaymentModelTests(TestCase):
             subscription_id=500,
             period_start=date(2026, 1, 1),
             period_end=date(2026, 1, 31),
+            issue_date=date(2026, 1, 1),
             due_date=date(2026, 2, 15),
             total=Decimal("150.00"),
         )
@@ -59,12 +61,13 @@ class PaymentModelTests(TestCase):
 
     def test_payment_amount_zero_rejected_by_check_constraint(self):
         with self.assertRaises(IntegrityError):
-            Payment.objects.create(
-                customer=self.customer,
-                method=Payment.Method.UPI,
-                amount=Decimal("0.00"),
-                recorded_by=self.staff_user,
-            )
+            with transaction.atomic():
+                Payment.objects.create(
+                    customer=self.customer,
+                    method=Payment.Method.UPI,
+                    amount=Decimal("0.00"),
+                    recorded_by=self.staff_user,
+                )
 
     def test_payment_amount_zero_rejected_by_clean(self):
         payment = Payment(
@@ -78,12 +81,13 @@ class PaymentModelTests(TestCase):
 
     def test_payment_amount_negative_rejected_by_check_constraint(self):
         with self.assertRaises(IntegrityError):
-            Payment.objects.create(
-                customer=self.customer,
-                method=Payment.Method.CASH,
-                amount=Decimal("-25.00"),
-                recorded_by=self.staff_user,
-            )
+            with transaction.atomic():
+                Payment.objects.create(
+                    customer=self.customer,
+                    method=Payment.Method.CASH,
+                    amount=Decimal("-25.00"),
+                    recorded_by=self.staff_user,
+                )
 
     def test_payment_amount_negative_rejected_by_clean(self):
         payment = Payment(
@@ -120,11 +124,12 @@ class PaymentModelTests(TestCase):
             recorded_by=self.staff_user,
         )
         with self.assertRaises(IntegrityError):
-            PaymentAllocation.objects.create(
-                payment=payment,
-                invoice=self.invoice,
-                amount=Decimal("0.00"),
-            )
+            with transaction.atomic():
+                PaymentAllocation.objects.create(
+                    payment=payment,
+                    invoice=self.invoice,
+                    amount=Decimal("0.00"),
+                )
 
     def test_allocation_amount_negative_rejected_by_check_constraint(self):
         payment = Payment.objects.create(
@@ -134,8 +139,29 @@ class PaymentModelTests(TestCase):
             recorded_by=self.staff_user,
         )
         with self.assertRaises(IntegrityError):
-            PaymentAllocation.objects.create(
-                payment=payment,
-                invoice=self.invoice,
-                amount=Decimal("-50.00"),
-            )
+            with transaction.atomic():
+                PaymentAllocation.objects.create(
+                    payment=payment,
+                    invoice=self.invoice,
+                    amount=Decimal("-50.00"),
+                )
+
+    def test_duplicate_payment_invoice_allocation_rejected_by_unique_constraint(self):
+        payment = Payment.objects.create(
+            customer=self.customer,
+            method=Payment.Method.CARD,
+            amount=Decimal("150.00"),
+            recorded_by=self.staff_user,
+        )
+        PaymentAllocation.objects.create(
+            payment=payment,
+            invoice=self.invoice,
+            amount=Decimal("75.00"),
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PaymentAllocation.objects.create(
+                    payment=payment,
+                    invoice=self.invoice,
+                    amount=Decimal("75.00"),
+                )
