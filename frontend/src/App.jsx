@@ -38,6 +38,8 @@ import {
   Shield,
   Search,
   LogOut,
+  Bell,
+  ChevronDown,
 } from "lucide-react";
 
 import "./App.css";
@@ -47,6 +49,7 @@ export function DashboardLayout() {
   const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
   const [globalSearch, setGlobalSearch] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   async function handleDemoLogin(email, password) {
     try {
@@ -98,30 +101,51 @@ export function DashboardLayout() {
   const isCustomer = role === "CUSTOMER";
   const isAdmin = role === "ADMIN";
 
+  const getDisplayName = () => {
+    if (userObj?.first_name && userObj?.last_name) {
+      if (userObj.first_name === "Admin" && userObj.last_name === "User") {
+        return "John Doe";
+      }
+      return `${userObj.first_name} ${userObj.last_name}`;
+    }
+    if (userObj?.email) {
+      if (userObj.email.startsWith("admin")) return "John Doe";
+      if (userObj.email.startsWith("sales")) return "Sarah Sales";
+      if (userObj.email.startsWith("acme")) return "Acme Corp";
+      const namePart = userObj.email.split("@")[0];
+      return namePart
+        .replace(/[._]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return "John Doe";
+  };
+
+  const getRoleLabel = () => {
+    if (role === "ADMIN") return "Admin";
+    if (role === "STAFF") return "Staff";
+    if (role === "CUSTOMER") return "Customer";
+    return role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : "Admin";
+  };
+
+  const getInitials = (name) => {
+    if (!name) return "JD";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const displayName = getDisplayName();
+  const displayRole = getRoleLabel();
+  const initials = getInitials(displayName);
+
   return (
     <div className="brightloop-app">
       {/* 1. Midnight Indigo Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo-mark">B</div>
-          <div className="brand-text">
-            <h2>Brightloop</h2>
-            <span>Subscription OS</span>
-          </div>
-        </div>
-
-        <div className="sidebar-user-pill">
-          <span className="user-avatar">
-            {userObj?.email ? userObj.email[0].toUpperCase() : "S"}
-          </span>
-          <div className="user-details">
-            <strong>
-              {userObj?.email ? userObj.email.split("@")[0] : "Sales Staff"}
-            </strong>
-            <span className={`role-badge role-${(role || "staff").toLowerCase()}`}>
-              {role}
-            </span>
-          </div>
+          <h2 className="brand-title">Brightloop</h2>
         </div>
 
         <nav className="sidebar-nav">
@@ -237,11 +261,66 @@ export function DashboardLayout() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="system-health">
-            <span className="health-dot"></span>
-            <span>Backend: {backendStatus}</span>
+          <div
+            className="sidebar-user-profile"
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+          >
+            <div className="user-avatar-circle">{initials}</div>
+            <div className="user-profile-info">
+              <span className="user-profile-name">{displayName}</span>
+              <span className="user-profile-role">{displayRole}</span>
+            </div>
+            <ChevronDown size={16} className={`user-profile-chevron ${userMenuOpen ? "open" : ""}`} />
           </div>
-          <small className="build-version">Brightloop v1.0 • Midnight & Vanilla</small>
+
+          {userMenuOpen && (
+            <div className="user-profile-dropdown">
+              <div className="dropdown-user-header">
+                <strong>{displayName}</strong>
+                <small>{userObj?.email || "admin@example.com"}</small>
+              </div>
+              <div className="dropdown-divider"></div>
+              <div className="dropdown-role-label">Switch Demo Role:</div>
+              <button
+                className={`dropdown-role-btn ${role === "ADMIN" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("admin@example.com", "Admin123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Admin (John Doe)
+              </button>
+              <button
+                className={`dropdown-role-btn ${role === "STAFF" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("sales@example.com", "Staff123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Staff (Sarah Sales)
+              </button>
+              <button
+                className={`dropdown-role-btn ${role === "CUSTOMER" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("acme@corp.com", "Customer123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Customer (Acme Corp)
+              </button>
+              <div className="dropdown-divider"></div>
+              <button
+                className="dropdown-logout-btn"
+                onClick={() => {
+                  handleLogout();
+                  setUserMenuOpen(false);
+                }}
+              >
+                <LogOut size={14} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -260,6 +339,16 @@ export function DashboardLayout() {
           </div>
 
           <div className="topbar-right">
+            <button
+              className="topbar-bell-btn"
+              title="Notifications"
+              aria-label="Notifications"
+              type="button"
+            >
+              <Bell size={18} />
+              <span className="bell-badge-dot"></span>
+            </button>
+
             <div className="role-select-box">
               <span>Role:</span>
               <select
