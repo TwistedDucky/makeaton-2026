@@ -1,3 +1,7 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/* ─── Brightloop Design Tokens ──────────────────────────────────────────── */
 :root {
   --midnight-indigo: #282B4A;
   --midnight-indigo-hover: #1e2038;
@@ -10,7 +14,7 @@
   --secondary-text: #6B7280;
   --text-main: #282B4A;
 
-  /* Status Colors from Guidelines */
+  /* Status Colors */
   --status-active-bg: #DCFCE7;
   --status-active-text: #166534;
   --status-pending-bg: #FEF3C7;
@@ -26,9 +30,8 @@
   --mono: ui-monospace, Consolas, monospace;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ─── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -40,7 +43,7 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  min-height: 100svh;
   width: 100%;
 }
 
@@ -57,4 +60,17 @@ p {
 
 button {
   font-family: var(--font-sans);
+}
+
+/* ─── Tailwind theme tokens (for auth pages) ─────────────────────────────── */
+@theme {
+  --color-indigo:       #282B4A;
+  --color-indigo-hover: #1e2038;
+  --color-vanilla:      #EEEBDA;
+  --color-soft-vanilla: #F6F5EE;
+  --color-muted-beige:  #E5E1D2;
+  --color-bl-border:    #DCD9C8;
+  --color-text-muted:   #6B7280;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-card: 12px;
 }
