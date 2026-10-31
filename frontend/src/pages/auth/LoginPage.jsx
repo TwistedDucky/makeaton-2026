@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import "./auth.css";
 
 export default function LoginPage() {
     const navigate  = useNavigate();
@@ -39,43 +40,32 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#EEEBDA] flex items-center justify-center px-4">
-            <div className="w-full max-w-md">
+        <div className="auth-page">
+            <div className="auth-container">
 
                 {/* Logo / Brand */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#282B4A] mb-4">
-                        <span className="text-white font-bold text-lg">B</span>
-                    </div>
-                    <h1 className="text-[28px] font-bold text-[#282B4A] leading-tight">
-                        Welcome back
-                    </h1>
-                    <p className="text-sm text-[#6B7280] mt-1">
-                        Sign in to your Brightloop account
-                    </p>
+                <div className="auth-brand">
+                    <div className="brand-logo-mark">B</div>
+                    <h1>Welcome back</h1>
+                    <p>Sign in to your Brightloop account</p>
                 </div>
 
                 {/* Card */}
-                <div className="bg-white rounded-xl border border-[#DCD9C8] p-8 shadow-sm">
+                <div className="auth-card">
 
                     {/* Error banner */}
                     {error && (
-                        <div className="flex items-start gap-2 bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] rounded-lg px-4 py-3 mb-6 text-sm">
-                            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                        <div className="error-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: 'var(--space-4)' }}>
+                            <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                             <span>{error}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} noValidate className="space-y-5">
+                    <form onSubmit={handleSubmit} noValidate className="auth-form">
 
                         {/* Email */}
-                        <div>
-                            <label
-                                htmlFor="email"
-                                className="block text-sm font-medium text-[#282B4A] mb-1.5"
-                            >
-                                Email address
-                            </label>
+                        <div className="form-field">
+                            <label htmlFor="email">Email address</label>
                             <input
                                 id="email"
                                 name="email"
@@ -85,30 +75,18 @@ export default function LoginPage() {
                                 value={form.email}
                                 onChange={handleChange}
                                 placeholder="you@example.com"
-                                className="w-full h-10 px-3 text-sm bg-white border border-[#DCD9C8] rounded-lg
-                                           text-[#282B4A] placeholder-[#6B7280]
-                                           focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                           transition-colors"
                             />
                         </div>
 
                         {/* Password */}
-                        <div>
-                            <div className="flex items-center justify-between mb-1.5">
-                                <label
-                                    htmlFor="password"
-                                    className="block text-sm font-medium text-[#282B4A]"
-                                >
-                                    Password
-                                </label>
-                                <Link
-                                    to="/forgot-password"
-                                    className="text-xs text-[#6B7280] hover:text-[#282B4A] transition-colors"
-                                >
+                        <div className="form-field">
+                            <div className="field-label-row">
+                                <label htmlFor="password">Password</label>
+                                <Link to="/forgot-password" className="forgot-link">
                                     Forgot password?
                                 </Link>
                             </div>
-                            <div className="relative">
+                            <div className="password-input-wrapper">
                                 <input
                                     id="password"
                                     name="password"
@@ -118,16 +96,12 @@ export default function LoginPage() {
                                     value={form.password}
                                     onChange={handleChange}
                                     placeholder="Enter your password"
-                                    className="w-full h-10 px-3 pr-10 text-sm bg-white border border-[#DCD9C8] rounded-lg
-                                               text-[#282B4A] placeholder-[#6B7280]
-                                               focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                               transition-colors"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPwd((v) => !v)}
                                     aria-label={showPwd ? "Hide password" : "Show password"}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#282B4A] transition-colors"
+                                    className="password-toggle"
                                 >
                                     {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
@@ -138,12 +112,10 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading || !form.email || !form.password}
-                            className="w-full h-10 flex items-center justify-center gap-2
-                                       bg-[#282B4A] hover:bg-[#1e2138] disabled:opacity-50 disabled:cursor-not-allowed
-                                       text-white text-sm font-medium rounded-lg transition-colors"
+                            className="btn-primary btn-auth"
                         >
                             {loading ? (
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span className="spinner" />
                             ) : (
                                 <>
                                     <LogIn size={15} />
@@ -154,19 +126,14 @@ export default function LoginPage() {
                     </form>
 
                     {/* Divider */}
-                    <div className="flex items-center gap-3 my-6">
-                        <div className="flex-1 h-px bg-[#DCD9C8]" />
-                        <span className="text-xs text-[#6B7280]">or</span>
-                        <div className="flex-1 h-px bg-[#DCD9C8]" />
+                    <div className="auth-divider">
+                        <span>or</span>
                     </div>
 
                     {/* Register link */}
-                    <p className="text-center text-sm text-[#6B7280]">
+                    <p className="auth-footer-text">
                         Don't have an account?{" "}
-                        <Link
-                            to="/register"
-                            className="text-[#282B4A] font-medium hover:underline"
-                        >
+                        <Link to="/register" className="auth-link">
                             Create account
                         </Link>
                     </p>
