@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import inspect
 import sys
 import threading
@@ -2302,6 +2302,241 @@ class InvoiceGenerationServiceTests(TestCase):
         self.assertEqual(len(summary.errors), 1)
         self.assertIn("returned same period_start", summary.errors[0]["error"])
 
+    def test_generate_capped_exact_24_periods_gives_empty_capped(self):
+        """A subscription with exactly 24 periods due gives capped == [] after processing all 24."""
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+        from apps.billing.services import generate_invoices
+
+        lines = [{"product_id": 1, "unit_price": Decimal("20.00"), "quantity": 1}]
+        base_date = date(2024, 1, 1)
+        periods = [
+            {
+                "id": 501,
+                "customer_id": self.customer.id,
+                "period_start": base_date + timedelta(days=30 * i),
+                "period_end": base_date + timedelta(days=30 * i + 28),
+                "lines": lines,
+            }
+            for i in range(24)
+        ]
+        fake = FakeSubscriptionsService(periods)
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    summary = generate_invoices(max_periods_per_subscription=24)
+
+        self.assertEqual(summary.created, 24)
+        self.assertEqual(summary.capped, [])
+        self.assertEqual(Invoice.objects.filter(subscription_id=501).count(), 24)
+
+    def test_generate_capped_25_periods_gives_capped_sub_id(self):
+        """A subscription with 25 periods due gives capped == [sub_id] and exactly 24 invoices created."""
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+        from apps.billing.services import generate_invoices
+
+        lines = [{"product_id": 1, "unit_price": Decimal("20.00"), "quantity": 1}]
+        base_date = date(2024, 1, 1)
+        periods = [
+            {
+                "id": 502,
+                "customer_id": self.customer.id,
+                "period_start": base_date + timedelta(days=30 * i),
+                "period_end": base_date + timedelta(days=30 * i + 28),
+                "lines": lines,
+            }
+            for i in range(25)
+        ]
+        fake = FakeSubscriptionsService(periods)
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    summary = generate_invoices(max_periods_per_subscription=24)
+
+        self.assertEqual(summary.created, 24)
+        self.assertEqual(summary.capped, [502])
+        self.assertEqual(Invoice.objects.filter(subscription_id=502).count(), 24)
+
+    def test_generated_invoice_line_satisfies_canonical_formula_with_fractional_tax(self):
+        """
+        Verify every generated InvoiceLine satisfies
+        line_total == quantity*unit_price - discount_amount + tax_amount, ROUND_HALF_UP.
+        Exercises fractional tax (18% on 33.33) and verifies from the DB directly.
+        """
+        from apps.billing import integrations
+        from apps.billing.models import InvoiceLine
+        from apps.billing.services import generate_invoices
+
+        def fractional_tax_priced(lines, billing_date=None):
+            priced_lines = []
+            disc_lines = []
+            disc_total = Decimal("0.00")
+            tax_total = Decimal("0.00")
+            sub_total = Decimal("0.00")
+            tot = Decimal("0.00")
+            for idx, pl in enumerate(lines):
+                qty = pl.get("quantity", 1)
+                u_price = Decimal(str(pl.get("unit_price", "0.00")))
+                d_amt = Decimal(str(pl.get("discount_amount", "0.00")))
+                gross = (Decimal(qty) * u_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                disc_sub = max(Decimal("0.00"), gross - d_amt)
+                t_amt = (disc_sub * Decimal("0.18")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                l_tot = (disc_sub + t_amt).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                priced_lines.append({
+                    "product_id": pl.get("product_id", 1),
+                    "product_name": "Test Item",
+                    "quantity": qty,
+                    "unit_price": u_price,
+                    "discount_amount": d_amt,
+                    "tax_amount": t_amt,
+                    "line_total": l_tot,
+                })
+                if d_amt > Decimal("0.00"):
+                    disc_lines.append({"discount_id": 100 + idx, "amount": d_amt})
+                sub_total += gross
+                disc_total += d_amt
+                tax_total += t_amt
+                tot += l_tot
+
+            return {
+                "lines": priced_lines,
+                "discount_lines": disc_lines,
+                "totals": {
+                    "subtotal": sub_total,
+                    "discount_total": disc_total,
+                    "tax_total": tax_total,
+                    "total": tot,
+                },
+            }
+
+        sub_id = 601
+        due = [
+            {
+                "id": sub_id,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 6, 1),
+                "period_end": date(2026, 6, 30),
+                "lines": [
+                    {"product_id": 1, "unit_price": Decimal("33.33"), "quantity": 1, "discount_amount": Decimal("0.00")},
+                    {"product_id": 2, "unit_price": Decimal("33.33"), "quantity": 2, "discount_amount": Decimal("5.00")},
+                ],
+            }
+        ]
+        fake = FakeSubscriptionsService(due)
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=fractional_tax_priced):
+                    summary = generate_invoices()
+
+        self.assertEqual(summary.created, 1)
+        self.assertEqual(summary.errors, [])
+
+        db_lines = list(InvoiceLine.objects.filter(invoice__subscription_id=sub_id).order_by("id"))
+        self.assertEqual(len(db_lines), 2)
+
+        for line in db_lines:
+            expected = (
+                Decimal(line.quantity) * line.unit_price - line.discount_amount + line.tax_amount
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            self.assertEqual(line.line_total, expected)
+
+        # Line 1: 1 * 33.33 - 0.00 + 6.00 = 39.33 (33.33 * 0.18 = 5.9994 -> 6.00)
+        self.assertEqual(db_lines[0].tax_amount, Decimal("6.00"))
+        self.assertEqual(db_lines[0].line_total, Decimal("39.33"))
+
+        # Line 2: 2 * 33.33 - 5.00 + 11.10 = 72.76 (61.66 * 0.18 = 11.0988 -> 11.10)
+        self.assertEqual(db_lines[1].tax_amount, Decimal("11.10"))
+        self.assertEqual(db_lines[1].line_total, Decimal("72.76"))
+
+    def test_generate_invoices_under_debug_false_with_mocked_subscriptions(self):
+        """
+        generate_invoices works under override_settings(DEBUG=False) with a mocked
+        subscriptions service via FakeSubscriptionsService.
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+        from apps.billing.services import generate_invoices
+
+        sub_id = 701
+        due = [
+            {
+                "id": sub_id,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 7, 1),
+                "period_end": date(2026, 7, 31),
+                "lines": [{"product_id": 1, "unit_price": Decimal("50.00"), "quantity": 1}],
+            }
+        ]
+        fake = FakeSubscriptionsService(due)
+
+        with override_settings(DEBUG=False):
+            with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+                with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                    with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                        summary = generate_invoices()
+
+        self.assertEqual(summary.created, 1)
+        self.assertEqual(summary.errors, [])
+        inv = Invoice.objects.get(subscription_id=sub_id)
+        self.assertEqual(inv.status, Invoice.Status.DRAFT)
+        self.assertEqual(inv.total, Decimal("50.00"))
+
+    def test_summary_as_dict_json_serializable(self):
+        """
+        summary_as_dict returns a JSON-safe dictionary with integers, ISO-formatted
+        date strings for period_start, string messages, and list of int capped IDs.
+        Tested with json.dumps on a summary containing an error with a date object.
+        """
+        import json
+        from apps.billing.services import GenerationSummary, summary_as_dict
+
+        summary = GenerationSummary(
+            created=3,
+            skipped_existing=1,
+            advanced=3,
+            errors=[
+                {
+                    "subscription_id": 801,
+                    "period_start": date(2026, 8, 1),
+                    "error": "Payment terms invalid",
+                },
+                {
+                    "subscription_id": 802,
+                    "period_start": date(2026, 9, 1),
+                    "message": "Advance failed",
+                },
+            ],
+            capped=[901, 902],
+        )
+
+        d = summary_as_dict(summary)
+        payload = json.dumps(d)
+        parsed = json.loads(payload)
+
+        self.assertEqual(parsed["created"], 3)
+        self.assertEqual(parsed["skipped_existing"], 1)
+        self.assertEqual(parsed["advanced"], 3)
+        self.assertEqual(parsed["capped"], [901, 902])
+        self.assertEqual(
+            parsed["errors"],
+            [
+                {
+                    "subscription_id": 801,
+                    "period_start": "2026-08-01",
+                    "message": "Payment terms invalid",
+                },
+                {
+                    "subscription_id": 802,
+                    "period_start": "2026-09-01",
+                    "message": "Advance failed",
+                },
+            ],
+        )
+
 
 class InvoiceGenerationTransactionTests(TransactionTestCase):
     def test_generate_failure_isolation(self):
@@ -2732,5 +2967,235 @@ class RealDiscountUsageIntegrationTests(TransactionTestCase):
         inv = Invoice.objects.get(subscription_id=9950)
         self.assertEqual(inv.status, Invoice.Status.DRAFT)
         self.assertEqual(inv.total, Decimal("110.00"))
+
+
+class RunBillingCommandTests(TestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            email="cmd_customer@example.com",
+            password="testpassword123",
+            role=User.Role.CUSTOMER,
+        )
+
+    def _default_priced(self, lines, billing_date=None):
+        subtotal = Decimal("0.00")
+        tax_total = Decimal("0.00")
+        total = Decimal("0.00")
+        priced_lines = []
+        for l in lines:
+            qty = l.get("quantity", 1)
+            up = Decimal(str(l.get("unit_price", "0.00")))
+            sub = (Decimal(qty) * up).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            tax = (sub * Decimal("0.10")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            lt = (sub + tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            priced_lines.append({
+                "product_id": l.get("product_id"),
+                "quantity": qty,
+                "unit_price": up,
+                "discount_amount": Decimal("0.00"),
+                "tax_amount": tax,
+                "line_total": lt,
+            })
+            subtotal += sub
+            tax_total += tax
+            total += lt
+        return {
+            "lines": priced_lines,
+            "discount_lines": [],
+            "totals": {
+                "subtotal": subtotal,
+                "discount_total": Decimal("0.00"),
+                "tax_total": tax_total,
+                "total": total,
+            },
+        }
+
+    def test_run_billing_normal_run(self):
+        """Normal run prints the counts and creates invoices as drafts."""
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+
+        due = [
+            {
+                "id": 1001,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 1, "unit_price": Decimal("40.00"), "quantity": 1}],
+            },
+            {
+                "id": 1002,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 2, "unit_price": Decimal("60.00"), "quantity": 1}],
+            },
+        ]
+        fake = FakeSubscriptionsService(due)
+        out = StringIO()
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    call_command("run_billing", "--date", "2026-05-01", stdout=out)
+
+        output = out.getvalue()
+        self.assertIn("created: 2", output)
+        self.assertIn("skipped_existing: 0", output)
+        self.assertIn("advanced: 2", output)
+        self.assertIn("capped: []", output)
+
+        invoices = Invoice.objects.filter(subscription_id__in=[1001, 1002])
+        self.assertEqual(invoices.count(), 2)
+        for inv in invoices:
+            self.assertEqual(inv.status, Invoice.Status.DRAFT)
+
+    def test_run_billing_json_output(self):
+        """--json output parses with json.loads and contains no raw date objects."""
+        from io import StringIO
+        import json
+        from django.core.management import call_command
+        from apps.billing import integrations
+
+        due = [
+            {
+                "id": 1003,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 1, "unit_price": Decimal("50.00"), "quantity": 1}],
+            }
+        ]
+        fake = FakeSubscriptionsService(due)
+        out = StringIO()
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    call_command("run_billing", "--date", "2026-05-01", "--json", stdout=out)
+
+        parsed = json.loads(out.getvalue())
+        self.assertEqual(parsed["created"], 1)
+        self.assertEqual(parsed["skipped_existing"], 0)
+        self.assertEqual(parsed["advanced"], 1)
+        self.assertEqual(parsed["capped"], [])
+        self.assertEqual(parsed["errors"], [])
+
+    def test_run_billing_injected_failure_raises_command_error_and_keeps_other_invoice(self):
+        """
+        An injected failure for one subscription makes call_command raise CommandError,
+        yet the other subscription's invoice is still created.
+        """
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+
+        due = [
+            {
+                "id": 1004,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 1, "unit_price": Decimal("50.00"), "quantity": 1}],
+            },
+            {
+                "id": 1005,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 999, "unit_price": Decimal("50.00"), "quantity": 1}],
+            },
+        ]
+        fake = FakeSubscriptionsService(due)
+
+        def selective_pricing(lines, billing_date=None):
+            for l in lines:
+                if l.get("product_id") == 999:
+                    raise RuntimeError("Pricing error for sub 1005")
+            return self._default_priced(lines, billing_date)
+
+        out = StringIO()
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=selective_pricing):
+                    with self.assertRaises(CommandError) as ctx:
+                        call_command("run_billing", "--date", "2026-05-01", stdout=out)
+
+        self.assertIn("1 error(s)", str(ctx.exception))
+        output = out.getvalue()
+        self.assertIn("created: 1", output)
+        self.assertIn("error: subscription 1005", output)
+        self.assertIn("Pricing error for sub 1005", output)
+
+        self.assertTrue(Invoice.objects.filter(subscription_id=1004).exists())
+        self.assertFalse(Invoice.objects.filter(subscription_id=1005).exists())
+
+    def test_run_billing_idempotent_second_run_no_duplicates(self):
+        """Second run creates no duplicate invoices (invoice count unchanged, skipped_existing > 0)."""
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+
+        due = [
+            {
+                "id": 1006,
+                "customer_id": self.customer.id,
+                "period_start": date(2026, 5, 1),
+                "period_end": date(2026, 5, 31),
+                "lines": [{"product_id": 1, "unit_price": Decimal("75.00"), "quantity": 1}],
+            }
+        ]
+        fake1 = FakeSubscriptionsService(due)
+        out1 = StringIO()
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake1.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake1.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    call_command("run_billing", "--date", "2026-05-01", stdout=out1)
+
+        self.assertEqual(Invoice.objects.filter(subscription_id=1006).count(), 1)
+        self.assertIn("created: 1", out1.getvalue())
+
+        fake2 = FakeSubscriptionsService(due)
+        out2 = StringIO()
+        with patch.object(integrations, "get_due_subscriptions", side_effect=fake2.get_due_subscriptions):
+            with patch.object(integrations, "advance_next_billing_date", side_effect=fake2.advance_next_billing_date):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._default_priced):
+                    call_command("run_billing", "--date", "2026-05-01", stdout=out2)
+
+        self.assertEqual(Invoice.objects.filter(subscription_id=1006).count(), 1)
+        self.assertIn("created: 0", out2.getvalue())
+        self.assertIn("skipped_existing: 1", out2.getvalue())
+
+    def test_run_billing_bad_date_raises_command_error_and_creates_nothing(self):
+        """Bad --date raises CommandError and creates nothing."""
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from apps.billing.models import Invoice
+
+        out = StringIO()
+        with self.assertRaises(CommandError) as ctx:
+            call_command("run_billing", "--date", "not-a-valid-date", stdout=out)
+
+        self.assertIn("Invalid date format", str(ctx.exception))
+        self.assertEqual(Invoice.objects.count(), 0)
+
+    def test_run_billing_invalid_max_periods_raises_command_error(self):
+        """--max-periods < 1 raises CommandError."""
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        out = StringIO()
+        with self.assertRaises(CommandError) as ctx:
+            call_command("run_billing", "--max-periods", "0", stdout=out)
+
+        self.assertIn("--max-periods must be >= 1", str(ctx.exception))
 
 

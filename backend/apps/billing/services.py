@@ -5,7 +5,7 @@ Business logic and write services for billing (invoices, generation).
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -41,6 +41,37 @@ class GenerationSummary:
     advanced: int
     errors: list[dict]
     capped: list[int]
+
+
+def summary_as_dict(summary: GenerationSummary) -> dict:
+    """Convert a GenerationSummary to a JSON-safe dictionary."""
+    errors_list = []
+    for err in summary.errors:
+        p_start = err.get("period_start")
+        if hasattr(p_start, "isoformat"):
+            p_start_str = p_start.isoformat()
+        elif p_start is not None:
+            p_start_str = str(p_start)
+        else:
+            p_start_str = ""
+
+        msg = err.get("message")
+        if msg is None:
+            msg = err.get("error", "")
+
+        errors_list.append({
+            "subscription_id": int(err.get("subscription_id", 0)),
+            "period_start": p_start_str,
+            "message": str(msg),
+        })
+
+    return {
+        "created": int(summary.created),
+        "skipped_existing": int(summary.skipped_existing),
+        "advanced": int(summary.advanced),
+        "capped": [int(x) for x in summary.capped],
+        "errors": errors_list,
+    }
 
 
 class _DiscountUsageFailed(Exception):
@@ -205,6 +236,20 @@ def generate_invoices(
 
     while True:
         due_subs = integrations.get_due_subscriptions(eval_date)
+
+        # A subscription goes into capped (once) only when it has already processed
+        # max_periods_per_subscription periods AND the re-poll still returns it as due.
+        for sub in due_subs:
+            s_id = sub.get("id")
+            if (
+                s_id is not None
+                and s_id not in errored_subs
+                and s_id not in capped_subs
+                and periods_count_by_sub[s_id] >= max_periods_per_subscription
+            ):
+                capped_subs.add(s_id)
+                capped.append(s_id)
+
         active_due = [
             s
             for s in due_subs
@@ -307,10 +352,12 @@ def generate_invoices(
                                     l_tot = pl.get("line_total")
                                     if l_tot is None:
                                         l_tot = (Decimal(qty) * u_price - d_amt + t_amt).quantize(
-                                            Decimal("0.01")
+                                            Decimal("0.01"), rounding=ROUND_HALF_UP
                                         )
                                     else:
-                                        l_tot = Decimal(str(l_tot))
+                                        l_tot = Decimal(str(l_tot)).quantize(
+                                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                                        )
 
                                     line_objs.append(
                                         InvoiceLine(
@@ -385,12 +432,6 @@ def generate_invoices(
                 processed_any = True
                 advanced_keys.add((sub_id, period_start))
                 periods_count_by_sub[sub_id] += 1
-
-                if periods_count_by_sub[sub_id] >= max_periods_per_subscription:
-                    if sub_id not in capped_subs:
-                        capped_subs.add(sub_id)
-                        capped.append(sub_id)
-
             except Exception as exc:
                 logger.exception(
                     "Error generating invoice for subscription %s period %s: %s",
