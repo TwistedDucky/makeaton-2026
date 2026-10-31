@@ -72,14 +72,14 @@ export default function SettingsView() {
               <label style={{ fontSize: "0.75rem", color: "var(--secondary-text)", textTransform: "uppercase" }}>
                 Base Currency
               </label>
-              <div style={{ fontWeight: "600", fontSize: "0.95rem" }}>USD ($)</div>
+              <div style={{ fontWeight: "600", fontSize: "0.95rem" }}>INR (₹)</div>
             </div>
 
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--secondary-text)", textTransform: "uppercase" }}>
                 Default Tax Rate
               </label>
-              <div style={{ fontWeight: "600", fontSize: "0.95rem" }}>Standard VAT (18.00%)</div>
+              <div style={{ fontWeight: "600", fontSize: "0.95rem" }}>GST (18.00%)</div>
             </div>
           </div>
         </div>

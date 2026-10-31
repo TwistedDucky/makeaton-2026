@@ -77,7 +77,7 @@ export default function InvoicesView({ onNavigate }) {
         </div>
         {!isCustomer && (
           <button className="btn-primary" onClick={() => onNavigate("billing-hook")}>
-            ⚡ Run Billing Cycle (M4)
+            Run billing cycle
           </button>
         )}
       </div>
@@ -121,7 +121,7 @@ export default function InvoicesView({ onNavigate }) {
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }} className="tabular-num">
-                    <strong>${inv.total_amount}</strong>
+                    <strong>₹{inv.total_amount}</strong>
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <button
@@ -129,7 +129,7 @@ export default function InvoicesView({ onNavigate }) {
                       style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}
                       onClick={() => setSelectedInvoice(inv)}
                     >
-                      View Invoice 📄
+                      View invoice
                     </button>
                   </td>
                 </tr>
@@ -172,10 +172,10 @@ export default function InvoicesView({ onNavigate }) {
                       <td>{l.desc}</td>
                       <td style={{ textAlign: "center" }}>{l.qty}</td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        ${l.unit_price}
+                        ₹{l.unit_price}
                       </td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        <strong>${l.total}</strong>
+                        <strong>₹{l.total}</strong>
                       </td>
                     </tr>
                   ))}
@@ -196,15 +196,15 @@ export default function InvoicesView({ onNavigate }) {
               >
                 <div>
                   <span style={{ color: "var(--secondary-text)" }}>Subtotal: </span>
-                  <span className="tabular-num">${selectedInvoice.subtotal}</span>
+                  <span className="tabular-num">₹{selectedInvoice.subtotal}</span>
                 </div>
                 <div>
-                  <span style={{ color: "var(--secondary-text)" }}>Tax (VAT 18%): </span>
-                  <span className="tabular-num">${selectedInvoice.tax_amount}</span>
+                  <span style={{ color: "var(--secondary-text)" }}>Tax (GST 18%): </span>
+                  <span className="tabular-num">₹{selectedInvoice.tax_amount}</span>
                 </div>
                 <div style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--midnight-indigo)" }}>
                   <span>Total Due: </span>
-                  <span className="tabular-num">${selectedInvoice.total_amount}</span>
+                  <span className="tabular-num">₹{selectedInvoice.total_amount}</span>
                 </div>
               </div>
             </div>
@@ -221,7 +221,7 @@ export default function InvoicesView({ onNavigate }) {
                     setSelectedInvoice(null);
                   }}
                 >
-                  Pay Invoice Now (${selectedInvoice.total_amount}) ➔
+                  Pay invoice now (₹{selectedInvoice.total_amount})
                 </button>
               )}
             </div>

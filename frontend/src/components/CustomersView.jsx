@@ -110,7 +110,7 @@ export default function CustomersView({ onNavigate }) {
                         style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}
                         onClick={() => onNavigate("subscriptions")}
                       >
-                        View Contracts ➔
+                        View contracts
                       </button>
                     </td>
                   </tr>

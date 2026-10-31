@@ -51,7 +51,7 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
           <h3>{subscription.subscription_number}</h3>
           <span className="customer-tag">{subscription.customer_email}</span>
         </div>
-        <button className="btn-secondary" onClick={onClose}>✕ Close</button>
+        <button className="btn-secondary" onClick={onClose}>Close</button>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
@@ -93,21 +93,21 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
                 disabled={loading}
                 onClick={() => handleTransition("QUOTATION")}
               >
-                Send as Quotation ➔
+                Send as quotation
               </button>
               <button
-                className="btn-accent"
+                className="btn-secondary"
                 disabled={loading}
                 onClick={() => handleTransition("CONFIRMED")}
               >
-                Directly Confirm ➔
+                Directly confirm
               </button>
               <button
                 className="btn-danger"
                 disabled={loading}
                 onClick={() => setShowCloseModal(true)}
               >
-                Cancel Contract
+                Cancel contract
               </button>
             </>
           )}
@@ -119,7 +119,7 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
                 disabled={loading}
                 onClick={() => handleTransition("CONFIRMED")}
               >
-                Confirm Subscription ➔
+                Confirm subscription
               </button>
               <button
                 className="btn-danger"
@@ -134,18 +134,18 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
           {subscription.status === "CONFIRMED" && (
             <>
               <button
-                className="btn-success"
+                className="btn-primary"
                 disabled={loading}
                 onClick={() => handleTransition("ACTIVE")}
               >
-                ⚡ Activate Contract (Start Billing)
+                Activate contract
               </button>
               <button
                 className="btn-danger"
                 disabled={loading}
                 onClick={() => setShowCloseModal(true)}
               >
-                Cancel Subscription
+                Cancel subscription
               </button>
             </>
           )}
@@ -157,14 +157,14 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
                 disabled={loading}
                 onClick={handleRenew}
               >
-                🔄 Renew Contract (+1 Cycle)
+                Renew contract
               </button>
               <button
                 className="btn-danger"
                 disabled={loading}
                 onClick={() => setShowCloseModal(true)}
               >
-                Terminate / Close Subscription
+                Terminate / Close subscription
               </button>
             </div>
           )}
@@ -241,24 +241,24 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
                 <td><strong>{line.product_name}</strong></td>
                 <td>{line.variant_display || "—"}</td>
                 <td>{line.quantity}</td>
-                <td>${Number(line.unit_price).toFixed(2)}</td>
-                <td>${Number(line.taxes).toFixed(2)}</td>
-                <td><strong>${Number(line.amount).toFixed(2)}</strong></td>
+                <td>₹{Number(line.unit_price).toFixed(2)}</td>
+                <td>₹{Number(line.taxes).toFixed(2)}</td>
+                <td><strong>₹{Number(line.amount).toFixed(2)}</strong></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
               <td colSpan="5" style={{ textAlign: "right" }}>Subtotal:</td>
-              <td>${Number(subscription.subtotal).toFixed(2)}</td>
+              <td>₹{Number(subscription.subtotal).toFixed(2)}</td>
             </tr>
             <tr>
               <td colSpan="5" style={{ textAlign: "right" }}>Taxes:</td>
-              <td>${Number(subscription.tax_amount).toFixed(2)}</td>
+              <td>₹{Number(subscription.tax_amount).toFixed(2)}</td>
             </tr>
             <tr className="grand-total-row">
               <td colSpan="5" style={{ textAlign: "right" }}>Total Contract Value:</td>
-              <td>${Number(subscription.total_amount).toFixed(2)}</td>
+              <td>₹{Number(subscription.total_amount).toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>

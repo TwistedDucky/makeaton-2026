@@ -52,9 +52,9 @@ export default function SubscriptionsView() {
           <div className="view-header">
             <div>
               <h2>Subscriptions & Lifecycle Pipeline</h2>
-              <p>Manage customer contract states: Draft ➔ Quotation ➔ Confirmed ➔ Active ➔ Closed</p>
+              <p>Manage customer contract states: Draft to Quotation to Confirmed to Active to Closed</p>
             </div>
-            <button className="btn-secondary" onClick={loadSubscriptions}>🔄 Refresh</button>
+            <button className="btn-secondary" onClick={loadSubscriptions}>Refresh</button>
           </div>
 
           {/* Filter Bar */}
@@ -123,13 +123,13 @@ export default function SubscriptionsView() {
                     </div>
                     <div>
                       <small>Total Value</small>
-                      <strong>${Number(sub.total_amount).toFixed(2)}</strong>
+                      <strong>₹{Number(sub.total_amount).toFixed(2)}</strong>
                     </div>
                   </div>
 
                   <div className="card-footer">
                     <span>Next Billing: {sub.next_billing_date || "—"}</span>
-                    <span className="card-action-hint">Manage Lifecycle ➔</span>
+                    <span className="card-action-hint">Manage lifecycle</span>
                   </div>
                 </div>
               ))}
