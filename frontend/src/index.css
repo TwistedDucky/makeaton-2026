@@ -26,9 +26,8 @@
   --font-sans: var(--font-family-base);
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ─── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -40,7 +39,7 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  min-height: 100svh;
   width: 100%;
 }
 
@@ -77,4 +76,16 @@ p {
 
 button {
   font-family: var(--font-family-base);
+}
+
+/* ─── Additional aliases (for auth pages) ─────────────────────────────── */
+:root {
+  --color-indigo:       var(--color-midnight-indigo);
+  --color-indigo-hover: #1e2038;
+  --color-vanilla:      #EEEBDA;
+  --color-soft-vanilla: var(--color-muted);
+  --color-muted-beige:  var(--color-muted);
+  --color-bl-border:    var(--color-border);
+  --color-text-muted:   var(--color-text-secondary);
+  --radius-card:        var(--radius-md);
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import DashboardView from "./components/DashboardView";
@@ -13,14 +14,19 @@ import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+
+// Auth pages from Member 1
+import LoginPage from "./pages/auth/LoginPage";
+import RegisterPage from "./pages/auth/RegisterPage";
+import UnauthorizedPage from "./pages/UnauthorizedPage";
+
 import "./App.css";
 
-function DashboardLayout() {
+export function DashboardLayout() {
   const { user, setUser } = useAuth();
   const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
   const [globalSearch, setGlobalSearch] = useState("");
-  const [showNotifications, setShowNotifications] = useState(false);
 
   async function handleDemoLogin(email, password) {
     try {
@@ -38,7 +44,7 @@ function DashboardLayout() {
       .then((data) => {
         if (data.success) {
           setBackendStatus("Online");
-          // If no user session is active, auto-login as sales rep for demo convenience
+          // Auto-login as sales rep for demo convenience if no session
           getCurrentUser()
             .then((res) => {
               const u = res?.data || res;
@@ -71,12 +77,6 @@ function DashboardLayout() {
   const role = userObj?.role || "STAFF";
   const isCustomer = role === "CUSTOMER";
   const isAdmin = role === "ADMIN";
-
-  const notifications = [
-    { id: 1, title: "Quotation Accepted", desc: "Acme Corp approved Q-1001 (₹208.86)", time: "10m ago" },
-    { id: 2, title: "Contract Billing Due", desc: "SUB-2026-0001 ready for invoice cycle", time: "1h ago" },
-    { id: 3, title: "Payment Recorded", desc: "Stark Industries paid INV-2026-0002 (₹1,475.00)", time: "3h ago" },
-  ];
 
   return (
     <div className="brightloop-app">
@@ -363,8 +363,19 @@ function DashboardLayout() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <DashboardLayout />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          <Route path="/dashboard/*" element={<DashboardLayout />} />
+          <Route path="/admin/*" element={<DashboardLayout />} />
+          <Route path="/portal/*" element={<DashboardLayout />} />
+          <Route path="/" element={<DashboardLayout />} />
+          <Route path="*" element={<DashboardLayout />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
