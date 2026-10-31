@@ -2,9 +2,9 @@ import React from "react";
 
 export default function ReportsView() {
   const metrics = [
-    { label: "Monthly Recurring Revenue (MRR)", value: "$6,683.86", change: "+12.4% vs last month" },
-    { label: "Annual Run-Rate (ARR)", value: "$80,206.32", change: "+18.2% YoY" },
-    { label: "Average Revenue Per User (ARPU)", value: "$1,670.96", change: "Healthy SaaS benchmark" },
+    { label: "Monthly Recurring Revenue (MRR)", value: "₹6,683.86", change: "+12.4% vs last month" },
+    { label: "Annual Run-Rate (ARR)", value: "₹80,206.32", change: "+18.2% YoY" },
+    { label: "Average Revenue Per User (ARPU)", value: "₹1,670.96", change: "Healthy SaaS benchmark" },
     { label: "Net Revenue Retention (NRR)", value: "114%", change: "Low contract churn (< 2%)" },
   ];
 

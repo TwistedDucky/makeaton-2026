@@ -78,7 +78,7 @@ export default function Member4BillingSimulator() {
 
                 <div className="period-box">
                   <span>Billing Period:</span>
-                  <strong>{item.period_start} &rarr; {item.period_end}</strong>
+                  <strong>{item.period_start} to {item.period_end}</strong>
                 </div>
 
                 <div className="lines-summary">
@@ -86,7 +86,7 @@ export default function Member4BillingSimulator() {
                   <ul>
                     {item.lines.map((l, i) => (
                       <li key={i}>
-                        {l.product_name} &times; {l.quantity} @ ${Number(l.unit_price).toFixed(2)}
+                        {l.product_name} &times; {l.quantity} @ ₹{Number(l.unit_price).toFixed(2)}
                       </li>
                     ))}
                   </ul>
@@ -97,7 +97,7 @@ export default function Member4BillingSimulator() {
                     className="btn-primary btn-block"
                     onClick={() => handleAdvance(item.id)}
                   >
-                    Simulate Invoice Generation & Advance Period ➔
+                    Simulate invoice generation & advance period
                   </button>
                 </div>
               </div>

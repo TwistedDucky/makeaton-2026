@@ -13,9 +13,9 @@ export default function DiscountsView() {
     },
     {
       code: "STARTUP50",
-      description: "Fixed $50 discount on any initial subscription order",
+      description: "Fixed ₹50 discount on any initial subscription order",
       type: "Fixed Amount",
-      value: "$50.00",
+      value: "₹50.00",
       scope: "Subscription Scope",
       status: "Active",
       expires: "2026-06-30",

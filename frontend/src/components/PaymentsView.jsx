@@ -80,7 +80,7 @@ export default function PaymentsView() {
                     <span className="status-badge status-active">{p.status}</span>
                   </td>
                   <td style={{ textAlign: "right" }} className="tabular-num">
-                    <strong>${p.amount}</strong>
+                    <strong>₹{p.amount}</strong>
                   </td>
                 </tr>
               ))}
