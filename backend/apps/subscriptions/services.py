@@ -196,15 +196,20 @@ def get_due_subscriptions(target_date: date = None) -> list[dict]:
             lines_data.append({
                 "product_id": line.product_id,
                 "product_name": f"{line.product.name}{variant_str}",
+                "variant_id": line.variant_id,
                 "quantity": line.quantity,
                 "unit_price": line.unit_price,
+                "tax_id": line.product.tax_id,
             })
+
+        period_start = sub.current_period_start or sub.start_date or eval_date
+        period_end = sub.current_period_end or calculate_period_end(period_start, sub.plan.billing_period)
 
         results.append({
             "id": sub.id,
             "customer_id": sub.customer_id,
-            "period_start": sub.current_period_start or sub.start_date,
-            "period_end": sub.current_period_end or target_date,
+            "period_start": period_start,
+            "period_end": period_end,
             "lines": lines_data,
         })
 
