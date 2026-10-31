@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
+import { initializeCsrf } from "./api/auth";
 
 function App() {
   const [message, setMessage] = useState("Connecting to Django...");
 
   useEffect(() => {
-    fetch("/api/hello/")
-      .then((response) => {
-        if (!response.ok) throw new Error("Request failed");
-        return response.json();
+    initializeCsrf()
+      .then((data) => {
+        if (data.success) {
+          setMessage("Connected to Django backend! (CSRF cookie initialized)");
+        } else {
+          setMessage("Failed to verify backend connection");
+        }
       })
-      .then((data) => setMessage(data.message))
       .catch(() => setMessage("Could not connect to Django"));
   }, []);
 
