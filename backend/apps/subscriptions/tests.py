@@ -99,6 +99,7 @@ class SubscriptionStateMachineTests(TestCase):
         due_item = due_list[0]
         self.assertEqual(due_item["id"], self.subscription.id)
         self.assertEqual(due_item["customer_id"], self.customer.id)
+        self.assertEqual(due_item["payment_terms_days"], 30)
         self.assertEqual(len(due_item["lines"]), 1)
         self.assertEqual(due_item["lines"][0]["unit_price"], Decimal("99.00"))
 

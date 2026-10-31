@@ -1,13 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { getProducts, getPlans } from "../api/catalog";
+import { createSubscription } from "../api/subscriptions";
 import { useAuth } from "../context/AuthContext";
+import { Package, Calendar, Plus, X, Check, ShieldCheck } from "lucide-react";
 
-export default function CatalogView() {
+export default function CatalogView({ onNavigate }) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("products");
   const [products, setProducts] = useState([]);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Subscribe Modal State for Customers
+  const [subscribingProduct, setSubscribingProduct] = useState(null);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [paymentTerms, setPaymentTerms] = useState("IMMEDIATE");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function loadCatalog() {
@@ -75,15 +87,77 @@ export default function CatalogView() {
     loadCatalog();
   }, []);
 
-  const role = user?.role || "STAFF";
+  const role = user?.role || "CUSTOMER";
   const isCustomer = role === "CUSTOMER";
+
+  function handleOpenSubscribe(prod, defaultPlanId = "") {
+    setSubscribingProduct(prod);
+    setSelectedVariantId(prod.variants && prod.variants.length > 0 ? String(prod.variants[0].id) : "");
+    setSelectedPlanId(defaultPlanId || (plans.length > 0 ? String(plans[0].id) : "1"));
+    setQuantity(1);
+    setPaymentTerms("IMMEDIATE");
+    setError("");
+  }
+
+  function handleSubscribePlan(pl) {
+    const firstProd = products[0] || { id: 1, name: "Software License", sales_price: pl.price || "50.00" };
+    handleOpenSubscribe(firstProd, String(pl.id));
+  }
+
+  // Price calculations
+  const basePrice = Number(subscribingProduct?.sales_price || 0);
+  const selectedVariant = (subscribingProduct?.variants || []).find(
+    (v) => String(v.id) === String(selectedVariantId)
+  );
+  const variantPrice = selectedVariant ? Number(selectedVariant.extra_price || 0) : 0;
+  const unitPrice = basePrice + variantPrice;
+  const subtotal = unitPrice * (Number(quantity) || 1);
+  const taxes = subtotal * 0.18;
+  const totalAmount = subtotal + taxes;
+
+  async function handleConfirmSubscribe(e) {
+    e.preventDefault();
+    if (!subscribingProduct) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const payload = {
+        plan: Number(selectedPlanId),
+        payment_terms: paymentTerms,
+        status: "CONFIRMED",
+        lines: [
+          {
+            product: subscribingProduct.id,
+            variant: selectedVariantId ? Number(selectedVariantId) : null,
+            quantity: Number(quantity) || 1,
+            unit_price: unitPrice.toFixed(2),
+            taxes: taxes.toFixed(2),
+          },
+        ],
+      };
+
+      await createSubscription(payload);
+      setMessage(`Successfully subscribed to ${subscribingProduct.name}! Your contract is active.`);
+      setSubscribingProduct(null);
+    } catch (err) {
+      console.error("Subscription failed", err);
+      setError(err?.message || err?.error || "Failed to create subscription.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="view-container">
       <div className="view-header">
         <div>
-          <h2>Catalog & Subscription Plans</h2>
-          <p>Configure software offerings, recurring billing intervals, and product variant add-ons.</p>
+          <h2>{isCustomer ? "Products & Subscription Plans" : "Catalog Management"}</h2>
+          <p>
+            {isCustomer
+              ? "Select and subscribe to software products, services, and flexible recurring billing plans."
+              : "Configure software offerings, recurring billing intervals, and product variant add-ons."}
+          </p>
         </div>
         {!isCustomer && (
           <a
@@ -97,18 +171,36 @@ export default function CatalogView() {
         )}
       </div>
 
-      <div className="status-chips" style={{ marginBottom: "1.5rem" }}>
+      {message && (
+        <div className="notice-banner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{message}</span>
+          {onNavigate && (
+            <button
+              className="btn-primary"
+              style={{ padding: "6px 12px", fontSize: "12px" }}
+              onClick={() => onNavigate("subscriptions")}
+            >
+              View in My Subscriptions
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="status-chips">
         <button
           className={`chip ${activeTab === "products" ? "chip-active" : ""}`}
           onClick={() => setActiveTab("products")}
         >
-          📦 Products & Variants ({products.length})
+          <Package size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
+          <span>Products & Offerings ({products.length})</span>
         </button>
         <button
           className={`chip ${activeTab === "plans" ? "chip-active" : ""}`}
           onClick={() => setActiveTab("plans")}
         >
-          📅 Billing Plans ({plans.length})
+          <Calendar size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
+          <span>Billing Plans ({plans.length})</span>
         </button>
       </div>
 
@@ -126,6 +218,7 @@ export default function CatalogView() {
                   {!isCustomer && <th>Cost Price</th>}
                   <th>Variants & Add-ons</th>
                   <th>Status</th>
+                  {isCustomer && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -135,36 +228,38 @@ export default function CatalogView() {
                       <strong>{p.name}</strong>
                     </td>
                     <td>
-                      <span className="chip" style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>
+                      <span className="chip" style={{ padding: "2px 8px", fontSize: "11px" }}>
                         {p.type}
                       </span>
                     </td>
-                    <td className="tabular-num">₹{Number(p.sales_price).toFixed(2)}</td>
+                    <td className="tabular-num">
+                      <strong>₹{Number(p.sales_price).toFixed(2)}</strong>
+                    </td>
                     {!isCustomer && (
-                      <td className="tabular-num" style={{ color: "var(--secondary-text)" }}>
+                      <td className="tabular-num" style={{ color: "var(--color-text-secondary)" }}>
                         {p.cost_price ? `₹${Number(p.cost_price).toFixed(2)}` : "—"}
                       </td>
                     )}
                     <td>
-                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                         {p.variants && p.variants.length > 0 ? (
                           p.variants.map((v, i) => (
                             <span
                               key={i}
                               style={{
-                                backgroundColor: "var(--soft-vanilla)",
-                                border: "1px solid var(--border)",
+                                backgroundColor: "var(--color-muted)",
+                                border: "1px solid var(--color-border)",
                                 borderRadius: "4px",
-                                padding: "0.15rem 0.4rem",
-                                fontSize: "0.75rem",
-                                color: "var(--midnight-indigo)",
+                                padding: "2px 6px",
+                                fontSize: "11px",
+                                color: "var(--color-midnight-indigo)",
                               }}
                             >
                               {v.attribute}: {v.value} {Number(v.extra_price) > 0 ? `(+₹${Number(v.extra_price).toFixed(2)})` : ""}
                             </span>
                           ))
                         ) : (
-                          <span style={{ color: "var(--secondary-text)", fontSize: "0.8rem" }}>None</span>
+                          <span style={{ color: "var(--color-text-secondary)", fontSize: "12px" }}>None</span>
                         )}
                       </div>
                     </td>
@@ -173,6 +268,18 @@ export default function CatalogView() {
                         {p.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
+                    {isCustomer && (
+                      <td>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: "6px 14px", fontSize: "12px" }}
+                          onClick={() => handleOpenSubscribe(p)}
+                        >
+                          <Plus size={14} />
+                          <span>Subscribe</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -192,6 +299,7 @@ export default function CatalogView() {
                   <th>Auto-Renewal</th>
                   <th>Auto-Close</th>
                   <th>Status</th>
+                  {isCustomer && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -204,7 +312,7 @@ export default function CatalogView() {
                       <strong>₹{Number(pl.price).toFixed(2)}</strong>
                     </td>
                     <td>
-                      <span className="chip" style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>
+                      <span className="chip" style={{ padding: "2px 8px", fontSize: "11px" }}>
                         {pl.billing_period}
                       </span>
                     </td>
@@ -214,10 +322,165 @@ export default function CatalogView() {
                     <td>
                       <span className="status-badge status-active">Active</span>
                     </td>
+                    {isCustomer && (
+                      <td>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: "6px 14px", fontSize: "12px" }}
+                          onClick={() => handleSubscribePlan(pl)}
+                        >
+                          <Plus size={14} />
+                          <span>Select Plan</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Subscribe Confirmation Modal */}
+      {subscribingProduct && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: 540 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h4 style={{ margin: 0 }}>Subscribe to {subscribingProduct.name}</h4>
+              <button
+                className="btn-secondary"
+                style={{ padding: 4, borderRadius: "50%", minWidth: 28, height: 28 }}
+                onClick={() => setSubscribingProduct(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {error && <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div>}
+
+            <form onSubmit={handleConfirmSubscribe} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                  Product
+                </label>
+                <input
+                  type="text"
+                  value={subscribingProduct.name}
+                  disabled
+                  style={{ width: "100%", boxSizing: "border-box", background: "var(--color-muted)" }}
+                />
+              </div>
+
+              {subscribingProduct.variants && subscribingProduct.variants.length > 0 && (
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                    Select Variant / Tier
+                  </label>
+                  <select
+                    value={selectedVariantId}
+                    onChange={(e) => setSelectedVariantId(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                  >
+                    {subscribingProduct.variants.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.attribute}: {v.value} {Number(v.extra_price) > 0 ? `(+₹${Number(v.extra_price).toFixed(2)})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                    Billing Plan
+                  </label>
+                  <select
+                    value={selectedPlanId}
+                    onChange={(e) => setSelectedPlanId(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                  >
+                    {plans.map((pl) => (
+                      <option key={pl.id} value={pl.id}>
+                        {pl.name} ({pl.billing_period})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+                  Payment Terms
+                </label>
+                <select
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                >
+                  <option value="IMMEDIATE">Immediate Payment</option>
+                  <option value="NET_15">Net 15 Days</option>
+                  <option value="NET_30">Net 30 Days</option>
+                </select>
+              </div>
+
+              {/* Summary Box */}
+              <div
+                style={{
+                  backgroundColor: "var(--color-muted)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: 12,
+                  marginTop: 4,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
+                  <span style={{ color: "var(--color-text-secondary)" }}>Base Price:</span>
+                  <span>₹{unitPrice.toFixed(2)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13 }}>
+                  <span style={{ color: "var(--color-text-secondary)" }}>Taxes (18% GST):</span>
+                  <span>₹{taxes.toFixed(2)}</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    paddingTop: 6,
+                    borderTop: "1px solid var(--color-border)",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: "var(--color-midnight-indigo)",
+                  }}
+                >
+                  <span>Total Due:</span>
+                  <span>₹{totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: 8 }}>
+                <button type="button" className="btn-secondary" onClick={() => setSubscribingProduct(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? "Subscribing..." : "Confirm & Subscribe"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

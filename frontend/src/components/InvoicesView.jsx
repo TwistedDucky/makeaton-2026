@@ -7,171 +7,60 @@ import {
   cancelInvoice,
   generateInvoices,
 } from "../api/billing";
-import { AlertTriangle, X, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, X, CheckCircle2, Tag } from "lucide-react";
 
-// Fallback mock invoices conforming strictly to Member 4's contract
-const MOCK_INVOICES = [
-  {
-    id: 1,
-    number: "INV-2026-00001",
-    subscription_id: "SUB-2026-00001",
-    customer: "acme@corp.com",
-    period_start: "2026-03-01",
-    period_end: "2026-03-31",
-    issue_date: "2026-03-01",
-    due_date: "2026-03-15",
-    status: "paid",
-    subtotal: "2000.00",
-    discount_total: "0.00",
-    tax_total: "360.00",
-    total: "2360.00",
-    amount_paid: "2360.00",
-    outstanding: "0.00",
-    is_overdue: false,
-    lines: [
-      {
-        id: 101,
-        product_id: 1,
-        variant_id: 1,
-        tax_id: 1,
-        product_name: "Brightloop CRM (Cloud Instance)",
-        quantity: 1,
-        unit_price: "2000.00",
-        discount_amount: "0.00",
-        tax_amount: "360.00",
-        line_total: "2360.00",
-      },
-    ],
-  },
-  {
-    id: 2,
-    number: "INV-2026-00002",
-    subscription_id: "SUB-2026-00002",
-    customer: "stark@industries.com",
-    period_start: "2026-03-15",
-    period_end: "2026-04-14",
-    issue_date: "2026-03-15",
-    due_date: "2026-03-30",
-    status: "confirmed",
-    subtotal: "1250.00",
-    discount_total: "125.00",
-    tax_total: "202.50",
-    total: "1327.50",
-    amount_paid: "0.00",
-    outstanding: "1327.50",
-    is_overdue: false,
-    lines: [
-      {
-        id: 102,
-        product_id: 2,
-        variant_id: 2,
-        tax_id: 1,
-        product_name: "Brightloop ERP (Starter Edition)",
-        quantity: 1,
-        unit_price: "1250.00",
-        discount_amount: "125.00",
-        tax_amount: "202.50",
-        line_total: "1327.50",
-      },
-    ],
-  },
-  {
-    id: 3,
-    number: "INV-2026-00003",
-    subscription_id: "SUB-2026-00003",
-    customer: "wayne@enterprises.com",
-    period_start: "2026-04-01",
-    period_end: "2026-04-30",
-    issue_date: "2026-04-01",
-    due_date: "2026-04-15",
-    status: "draft",
-    subtotal: "5000.00",
-    discount_total: "500.00",
-    tax_total: "810.00",
-    total: "5310.00",
-    amount_paid: "0.00",
-    outstanding: "5310.00",
-    is_overdue: false,
-    lines: [
-      {
-        id: 103,
-        product_id: 3,
-        variant_id: 3,
-        tax_id: 1,
-        product_name: "Priority Support add-on (24/7 SLA)",
-        quantity: 2,
-        unit_price: "2500.00",
-        discount_amount: "500.00",
-        tax_amount: "810.00",
-        line_total: "5310.00",
-      },
-    ],
-  },
-  {
-    id: 4,
-    number: "INV-2026-00004",
-    subscription_id: "SUB-2026-00001",
-    customer: "acme@corp.com",
-    period_start: "2026-02-01",
-    period_end: "2026-02-28",
-    issue_date: "2026-02-01",
-    due_date: "2026-02-15",
-    status: "confirmed",
-    subtotal: "2000.00",
-    discount_total: "0.00",
-    tax_total: "360.00",
-    total: "2360.00",
-    amount_paid: "0.00",
-    outstanding: "2360.00",
-    is_overdue: true,
-    lines: [
-      {
-        id: 104,
-        product_id: 1,
-        variant_id: 1,
-        tax_id: 1,
-        product_name: "Brightloop CRM (Cloud Instance)",
-        quantity: 1,
-        unit_price: "2000.00",
-        discount_amount: "0.00",
-        tax_amount: "360.00",
-        line_total: "2360.00",
-      },
-    ],
-  },
-  {
-    id: 5,
-    number: "INV-2026-00005",
-    subscription_id: "SUB-2026-00004",
-    customer: "acme@corp.com",
-    period_start: "2026-01-01",
-    period_end: "2026-01-31",
-    issue_date: "2026-01-01",
-    due_date: "2026-01-15",
-    status: "cancelled",
-    subtotal: "1000.00",
-    discount_total: "0.00",
-    tax_total: "180.00",
-    total: "1180.00",
-    amount_paid: "0.00",
-    outstanding: "0.00",
-    is_overdue: false,
-    lines: [
-      {
-        id: 105,
-        product_id: 1,
-        variant_id: 1,
-        tax_id: 1,
-        product_name: "Brightloop CRM (Trial Sandbox)",
-        quantity: 1,
-        unit_price: "1000.00",
-        discount_amount: "0.00",
-        tax_amount: "180.00",
-        line_total: "1180.00",
-      },
-    ],
-  },
-];
+/**
+ * String-based money formatter: avoids parseFloat and float precision issues.
+ * Member 4 contract: Money fields are always strings like "118.00".
+ */
+function formatMoney(val, prefix = "₹") {
+  if (val === null || val === undefined || val === "") return `${prefix}0.00`;
+  const str = String(val).trim();
+  const isNegative = str.startsWith("-");
+  const clean = isNegative ? str.slice(1) : str;
+  const parts = clean.split(".");
+  const intPart = parts[0] || "0";
+  const fracPart = parts[1] || "00";
+  const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  let formattedFrac = fracPart;
+  if (formattedFrac.length === 1) formattedFrac += "0";
+  else if (formattedFrac.length > 2) formattedFrac = formattedFrac.slice(0, 2);
+  return `${isNegative ? "-" : ""}${prefix}${formattedInt}.${formattedFrac}`;
+}
+
+/**
+ * Checks if a string money value is strictly greater than 0 without using parseFloat.
+ */
+function isNonZero(val) {
+  if (!val) return false;
+  const s = String(val).trim();
+  if (s.startsWith("-")) return false;
+  const digits = s.replace(/[^\d]/g, "");
+  return parseInt(digits, 10) > 0;
+}
+
+/**
+ * Parses Member 4 error response shape: { success: false, message, errors }.
+ * Handles 409 (illegal status), 400 (validation), 403 (wrong role), 404 (not found).
+ */
+function formatErrorMessage(err, fallback = "Operation failed.") {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  let msg = err.message || err.detail || "";
+  if (err.errors) {
+    if (Array.isArray(err.errors)) {
+      const details = err.errors.join(", ");
+      msg = msg ? `${msg}: ${details}` : details;
+    } else if (typeof err.errors === "object") {
+      const errParts = Object.entries(err.errors).map(
+        ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
+      );
+      const details = errParts.join("; ");
+      msg = msg ? `${msg} (${details})` : details;
+    }
+  }
+  return msg || fallback;
+}
 
 export default function InvoicesView({ onNavigate }) {
   const { user } = useAuth();
@@ -182,6 +71,7 @@ export default function InvoicesView({ onNavigate }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [amountsChangedNotice, setAmountsChangedNotice] = useState(null);
   const [actionNotice, setActionNotice] = useState(null);
+  const [errorNotice, setErrorNotice] = useState(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generateTargetDate, setGenerateTargetDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -193,24 +83,24 @@ export default function InvoicesView({ onNavigate }) {
   const isStaff = role === "STAFF" || role === "ADMIN";
 
   // Fetch invoices from Member 4's GET /api/billing/invoices/
+  // Response shape: list = { count, next, previous, results }
+  // Server filters by role - NO client-side customer filtering.
   async function fetchInvoices() {
     setLoading(true);
+    setErrorNotice(null);
     try {
       const params = {};
       if (statusFilter !== "all") params.status = statusFilter;
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
       const res = await getInvoices(params);
-      const dataList = res?.data?.results || res?.results || res?.data || res;
-      if (Array.isArray(dataList) && dataList.length > 0) {
-        setInvoices(dataList);
-      } else {
-        // Fallback to local mock data matching contract
-        setInvoices(MOCK_INVOICES);
-      }
+      const dataList =
+        res?.results ?? (Array.isArray(res) ? res : (res?.data?.results ?? res?.data ?? []));
+      setInvoices(Array.isArray(dataList) ? dataList : []);
     } catch (err) {
-      console.warn("Billing API not yet live; using proposed contract fixtures", err);
-      setInvoices(MOCK_INVOICES);
+      console.error("Failed to fetch invoices:", err);
+      setErrorNotice(formatErrorMessage(err, "Failed to load invoices from server."));
+      setInvoices([]);
     } finally {
       setLoading(false);
     }
@@ -220,38 +110,45 @@ export default function InvoicesView({ onNavigate }) {
     fetchInvoices();
   }, [statusFilter]);
 
-  // Open invoice detail with lines: GET /api/billing/invoices/{id}/
+  // Open invoice detail with lines[] and discounts[]: GET /api/billing/invoices/{id}/
+  // Response shape: detail = plain object
   async function handleViewInvoice(inv) {
+    setErrorNotice(null);
     try {
       const res = await getInvoice(inv.id);
-      const detail = res?.data || res || inv;
+      const detail = res?.data?.id ? res.data : (res?.id ? res : inv);
       setSelectedInvoice(detail);
     } catch (err) {
+      console.error("Failed to view invoice detail:", err);
+      setErrorNotice(formatErrorMessage(err, "Failed to load invoice details."));
       setSelectedInvoice(inv);
     }
   }
 
   // Confirm draft invoice: POST /api/billing/invoices/{id}/confirm/
+  // Response shape: confirm = { success, message, data: { invoice, amounts_changed } }
+  // Critical: Read res.data.invoice, not res.data
   async function handleConfirmInvoice(invoiceId) {
     setActionNotice(null);
+    setErrorNotice(null);
     try {
       const res = await confirmInvoice(invoiceId);
-      const data = res?.data || {};
+      // Member 4 contract: res.data = { invoice, amounts_changed }
+      const updatedInvoice = res?.data?.invoice || (res?.data?.id ? res.data : {});
+      const amountsChanged = Boolean(res?.data?.amounts_changed);
 
-      // If response includes amounts_changed (true if discount expired and invoice re-priced)
-      if (data.amounts_changed) {
+      if (amountsChanged) {
         setAmountsChangedNotice(
           "Notice: Invoice amounts changed during confirmation because an applied discount expired or became unavailable. The invoice has been re-priced."
         );
       } else {
-        setActionNotice("Invoice successfully confirmed.");
+        setActionNotice(res?.message || "Invoice successfully confirmed.");
       }
 
-      // Update invoice in state
       setInvoices((prev) =>
         prev.map((i) =>
           i.id === invoiceId
-            ? { ...i, status: "confirmed", ...(data.total ? data : {}) }
+            ? { ...i, status: "confirmed", ...updatedInvoice }
             : i
         )
       );
@@ -260,92 +157,86 @@ export default function InvoicesView({ onNavigate }) {
         setSelectedInvoice((prev) => ({
           ...prev,
           status: "confirmed",
-          ...(data.total ? data : {}),
+          ...updatedInvoice,
         }));
       }
     } catch (err) {
-      // In mock simulation mode if backend endpoint is 404
-      const inv = invoices.find((i) => i.id === invoiceId);
-      // Simulate amounts_changed test scenario if discount was present
-      const hadDiscount = inv && Number(inv.discount_total || 0) > 0;
-      if (hadDiscount) {
-        setAmountsChangedNotice(
-          "Notice: Invoice amounts changed during confirmation because an applied discount expired or became unavailable. The invoice has been re-priced."
-        );
-      } else {
-        setActionNotice("Invoice successfully confirmed.");
-      }
-
-      setInvoices((prev) =>
-        prev.map((i) => (i.id === invoiceId ? { ...i, status: "confirmed" } : i))
-      );
-      if (selectedInvoice && selectedInvoice.id === invoiceId) {
-        setSelectedInvoice((prev) => ({ ...prev, status: "confirmed" }));
-      }
+      console.error("Confirm invoice error:", err);
+      setErrorNotice(formatErrorMessage(err, "Failed to confirm invoice."));
     }
   }
 
   // Cancel invoice: POST /api/billing/invoices/{id}/cancel/
+  // Response shape: cancel = { success, message, data: <invoice> }
   async function handleCancelInvoice(invoice) {
-    // Contract rule: Cancel is blocked if any payment is recorded
-    if (Number(invoice.amount_paid || 0) > 0) {
-      setActionNotice(
-        "Cancellation blocked: Payments have already been recorded against this invoice."
+    if (isNonZero(invoice.amount_paid)) {
+      setErrorNotice(
+        "Cancellation blocked: Payments have already been recorded against this invoice (HTTP 409)."
       );
       return;
     }
 
+    setActionNotice(null);
+    setErrorNotice(null);
     try {
-      await cancelInvoice(invoice.id);
-      setActionNotice(`Invoice ${invoice.number} cancelled.`);
+      const res = await cancelInvoice(invoice.id);
+      const updatedInvoice = res?.data || {};
+      const msg = res?.message || `Invoice ${invoice.number} cancelled.`;
+      setActionNotice(msg);
       setInvoices((prev) =>
-        prev.map((i) => (i.id === invoice.id ? { ...i, status: "cancelled", outstanding: "0.00" } : i))
+        prev.map((i) =>
+          i.id === invoice.id
+            ? { ...i, status: "cancelled", outstanding: "0.00", ...updatedInvoice }
+            : i
+        )
       );
       if (selectedInvoice && selectedInvoice.id === invoice.id) {
-        setSelectedInvoice((prev) => ({ ...prev, status: "cancelled", outstanding: "0.00" }));
+        setSelectedInvoice((prev) => ({
+          ...prev,
+          status: "cancelled",
+          outstanding: "0.00",
+          ...updatedInvoice,
+        }));
       }
     } catch (err) {
-      // Fallback mock update
-      setActionNotice(`Invoice ${invoice.number} cancelled.`);
-      setInvoices((prev) =>
-        prev.map((i) => (i.id === invoice.id ? { ...i, status: "cancelled", outstanding: "0.00" } : i))
-      );
-      if (selectedInvoice && selectedInvoice.id === invoice.id) {
-        setSelectedInvoice((prev) => ({ ...prev, status: "cancelled", outstanding: "0.00" }));
-      }
+      console.error("Cancel invoice error:", err);
+      setErrorNotice(formatErrorMessage(err, `Failed to cancel invoice ${invoice.number}.`));
     }
   }
 
   // Generate invoices for target date: POST /api/billing/invoices/generate/
+  // Response shape: generate = { success, message, data: { created, skipped_existing, advanced, capped, errors } }
   async function handleGenerateInvoices(e) {
     e.preventDefault();
     setGenerating(true);
     setActionNotice(null);
+    setErrorNotice(null);
     try {
       const res = await generateInvoices({ target_date: generateTargetDate });
-      const msg = res?.message || "Billing cycle executed successfully.";
-      setActionNotice(`✓ ${msg}`);
+      const stats = res?.data;
+      let summary = res?.message || "Billing cycle executed successfully.";
+      if (stats && typeof stats.created === "number") {
+        summary = `Generation complete: ${stats.created} invoice(s) created, ${stats.advanced ?? 0} subscription(s) advanced.`;
+        if (stats.skipped_existing) summary += ` (${stats.skipped_existing} up to date)`;
+        if (stats.capped) summary += ` (${stats.capped} capped)`;
+        if (stats.errors && stats.errors.length > 0) {
+          summary += ` [${stats.errors.length} error(s)]`;
+        }
+      }
+      setActionNotice(`✓ ${summary}`);
       setShowGenerateModal(false);
       fetchInvoices();
     } catch (err) {
-      // Graceful fallback simulation
-      setActionNotice(
-        `✓ Billing cycle executed for target date ${generateTargetDate}. Invoices generated for due subscriptions.`
-      );
+      console.error("Generate invoices error:", err);
+      setErrorNotice(formatErrorMessage(err, "Failed to generate invoices."));
       setShowGenerateModal(false);
     } finally {
       setGenerating(false);
     }
   }
 
-  // Customer role only sees their own invoices
-  const filteredInvoices = invoices.filter((inv) => {
-    if (isCustomer) {
-      const userEmail = user?.email || "acme@corp.com";
-      if (inv.customer !== userEmail && inv.customer_email !== userEmail) {
-        return false;
-      }
-    }
+  // Server filters by role. Client only applies status and search filters on the fetched list.
+  const displayedInvoices = invoices.filter((inv) => {
     if (statusFilter !== "all" && inv.status !== statusFilter) {
       return false;
     }
@@ -389,7 +280,7 @@ export default function InvoicesView({ onNavigate }) {
         )}
       </div>
 
-      {/* Critical Notice: Amounts Changed Banner (Never Hidden!) */}
+      {/* Critical Notice: Amounts Changed Banner */}
       {amountsChangedNotice && (
         <div
           className="notice-banner"
@@ -421,6 +312,43 @@ export default function InvoicesView({ onNavigate }) {
         </div>
       )}
 
+      {/* Error Notice Banner */}
+      {errorNotice && (
+        <div
+          className="notice-banner"
+          style={{
+            backgroundColor: "var(--color-status-overdue-bg)",
+            borderColor: "var(--color-status-overdue-text)",
+            color: "var(--color-status-overdue-text)",
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--color-status-overdue-text)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <AlertTriangle size={18} />
+            <span>{errorNotice}</span>
+          </span>
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "inherit",
+              display: "flex",
+              alignItems: "center",
+            }}
+            onClick={() => setErrorNotice(null)}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Action Notification */}
       {actionNotice && (
         <div
@@ -438,7 +366,10 @@ export default function InvoicesView({ onNavigate }) {
             alignItems: "center",
           }}
         >
-          <span>{actionNotice}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <CheckCircle2 size={16} style={{ color: "var(--color-status-active-text)" }} />
+            <span>{actionNotice}</span>
+          </span>
           <button
             style={{
               background: "none",
@@ -543,22 +474,29 @@ export default function InvoicesView({ onNavigate }) {
                     Loading invoices...
                   </td>
                 </tr>
-              ) : filteredInvoices.length === 0 ? (
+              ) : displayedInvoices.length === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
-                    style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}
+                    style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--color-text-secondary)" }}
                   >
-                    No invoices found matching criteria.
+                    <div style={{ fontWeight: 600, fontSize: "1rem", marginBottom: "0.25rem", color: "var(--color-text-primary)" }}>
+                      No invoices found
+                    </div>
+                    <div style={{ fontSize: "var(--font-size-small)" }}>
+                      {isStaff
+                        ? "No invoices generated yet. Click 'Generate invoices' to run a billing cycle."
+                        : "No invoices available for your account yet."}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((inv) => (
+                displayedInvoices.map((inv) => (
                   <tr key={inv.id}>
                     <td>
                       <strong>{inv.number}</strong>
                     </td>
-                    <td>{inv.customer}</td>
+                    <td>{inv.customer || inv.customer_email || "N/A"}</td>
                     <td style={{ fontSize: "var(--font-size-small)" }}>
                       {inv.period_start} to {inv.period_end}
                     </td>
@@ -581,27 +519,25 @@ export default function InvoicesView({ onNavigate }) {
                       )}
                     </td>
                     <td>
-                      {/* Lowercase status badge with 6px dot */}
                       <span className={`status-badge status-${inv.status}`}>
                         {inv.status}
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }} className="tabular-num">
-                      <strong>₹{Number(inv.total).toFixed(2)}</strong>
+                      <strong>{formatMoney(inv.total)}</strong>
                     </td>
                     <td style={{ textAlign: "right" }} className="tabular-num">
-                      ₹{Number(inv.amount_paid || 0).toFixed(2)}
+                      {formatMoney(inv.amount_paid)}
                     </td>
                     <td style={{ textAlign: "right" }} className="tabular-num">
                       <strong
                         style={{
-                          color:
-                            Number(inv.outstanding || 0) > 0
-                              ? "var(--color-status-overdue-text)"
-                              : "inherit",
+                          color: isNonZero(inv.outstanding)
+                            ? "var(--color-status-overdue-text)"
+                            : "inherit",
                         }}
                       >
-                        ₹{Number(inv.outstanding || 0).toFixed(2)}
+                        {formatMoney(inv.outstanding)}
                       </strong>
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -633,9 +569,9 @@ export default function InvoicesView({ onNavigate }) {
                               fontSize: "0.8rem",
                               color: "var(--color-status-overdue-text)",
                             }}
-                            disabled={Number(inv.amount_paid || 0) > 0}
+                            disabled={isNonZero(inv.amount_paid)}
                             title={
-                              Number(inv.amount_paid || 0) > 0
+                              isNonZero(inv.amount_paid)
                                 ? "Cannot cancel invoice with recorded payments"
                                 : "Cancel invoice"
                             }
@@ -681,8 +617,8 @@ export default function InvoicesView({ onNavigate }) {
                   )}
                 </div>
                 <p className="card-subtitle" style={{ marginTop: "4px" }}>
-                  Customer: <strong>{selectedInvoice.customer}</strong> • Subscription:{" "}
-                  <strong>{selectedInvoice.subscription_id || "N/A"}</strong>
+                  Customer: <strong>{selectedInvoice.customer || selectedInvoice.customer_email || "N/A"}</strong> • Subscription:{" "}
+                  <strong>{selectedInvoice.subscription_id || selectedInvoice.subscription || "N/A"}</strong>
                 </p>
               </div>
               <button
@@ -731,21 +667,60 @@ export default function InvoicesView({ onNavigate }) {
             >
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Issue Date:</span>
-                <div><strong>{selectedInvoice.issue_date}</strong></div>
+                <div><strong>{selectedInvoice.issue_date || "—"}</strong></div>
               </div>
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Due Date:</span>
-                <div><strong>{selectedInvoice.due_date}</strong></div>
+                <div><strong>{selectedInvoice.due_date || "—"}</strong></div>
               </div>
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Period:</span>
                 <div>
                   <strong>
-                    {selectedInvoice.period_start} to {selectedInvoice.period_end}
+                    {selectedInvoice.period_start || "—"} to {selectedInvoice.period_end || "—"}
                   </strong>
                 </div>
               </div>
             </div>
+
+            {/* Discounts List (from Member 4's detail shape: discounts[]) */}
+            {Array.isArray(selectedInvoice.discounts) && selectedInvoice.discounts.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <h4
+                  style={{
+                    fontSize: "var(--font-size-small)",
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                    marginBottom: "0.5rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Tag size={14} /> Applied Discounts
+                </h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  {selectedInvoice.discounts.map((disc, idx) => (
+                    <span
+                      key={disc.id || idx}
+                      className="chip"
+                      style={{
+                        backgroundColor: "var(--color-status-confirmed-bg)",
+                        color: "var(--color-status-confirmed-text)",
+                        border: "1px solid var(--color-border)",
+                        padding: "4px 10px",
+                        fontSize: "var(--font-size-small)",
+                        borderRadius: "var(--radius-sm)",
+                      }}
+                    >
+                      {disc.name || disc.code || "Discount"}
+                      {disc.amount && ` (-${formatMoney(disc.amount)})`}
+                      {disc.percent && ` (${disc.percent}%)`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Line Items Table */}
             <div style={{ marginBottom: "1rem" }}>
@@ -766,16 +741,16 @@ export default function InvoicesView({ onNavigate }) {
                       <td>{l.product_name || l.desc || "Item"}</td>
                       <td style={{ textAlign: "center" }}>{l.quantity || l.qty}</td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        ₹{Number(l.unit_price).toFixed(2)}
+                        {formatMoney(l.unit_price)}
                       </td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        ₹{Number(l.discount_amount || 0).toFixed(2)}
+                        {formatMoney(l.discount_amount)}
                       </td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        ₹{Number(l.tax_amount || 0).toFixed(2)}
+                        {formatMoney(l.tax_amount)}
                       </td>
                       <td style={{ textAlign: "right" }} className="tabular-num">
-                        <strong>₹{Number(l.line_total || l.total).toFixed(2)}</strong>
+                        <strong>{formatMoney(l.line_total || l.total)}</strong>
                       </td>
                     </tr>
                   ))}
@@ -798,15 +773,15 @@ export default function InvoicesView({ onNavigate }) {
             >
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Subtotal: </span>
-                <span className="tabular-num">₹{Number(selectedInvoice.subtotal).toFixed(2)}</span>
+                <span className="tabular-num">{formatMoney(selectedInvoice.subtotal)}</span>
               </div>
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Discount Total: </span>
-                <span className="tabular-num">-₹{Number(selectedInvoice.discount_total || 0).toFixed(2)}</span>
+                <span className="tabular-num">-{formatMoney(selectedInvoice.discount_total)}</span>
               </div>
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Tax Total: </span>
-                <span className="tabular-num">+₹{Number(selectedInvoice.tax_total || 0).toFixed(2)}</span>
+                <span className="tabular-num">+{formatMoney(selectedInvoice.tax_total)}</span>
               </div>
               <div
                 style={{
@@ -818,23 +793,22 @@ export default function InvoicesView({ onNavigate }) {
                 }}
               >
                 <span>Total Amount: </span>
-                <span className="tabular-num">₹{Number(selectedInvoice.total).toFixed(2)}</span>
+                <span className="tabular-num">{formatMoney(selectedInvoice.total)}</span>
               </div>
               <div>
                 <span style={{ color: "var(--color-text-secondary)" }}>Amount Paid: </span>
-                <span className="tabular-num">₹{Number(selectedInvoice.amount_paid || 0).toFixed(2)}</span>
+                <span className="tabular-num">{formatMoney(selectedInvoice.amount_paid)}</span>
               </div>
               <div
                 style={{
                   fontWeight: 600,
-                  color:
-                    Number(selectedInvoice.outstanding || 0) > 0
-                      ? "var(--color-status-overdue-text)"
-                      : "var(--color-status-active-text)",
+                  color: isNonZero(selectedInvoice.outstanding)
+                    ? "var(--color-status-overdue-text)"
+                    : "var(--color-status-active-text)",
                 }}
               >
                 <span>Outstanding Balance: </span>
-                <span className="tabular-num">₹{Number(selectedInvoice.outstanding || 0).toFixed(2)}</span>
+                <span className="tabular-num">{formatMoney(selectedInvoice.outstanding)}</span>
               </div>
             </div>
 
@@ -859,9 +833,9 @@ export default function InvoicesView({ onNavigate }) {
                   <button
                     className="btn-secondary"
                     style={{ color: "var(--color-status-overdue-text)" }}
-                    disabled={Number(selectedInvoice.amount_paid || 0) > 0}
+                    disabled={isNonZero(selectedInvoice.amount_paid)}
                     title={
-                      Number(selectedInvoice.amount_paid || 0) > 0
+                      isNonZero(selectedInvoice.amount_paid)
                         ? "Cannot cancel invoice with recorded payments"
                         : "Cancel invoice"
                     }
@@ -879,12 +853,12 @@ export default function InvoicesView({ onNavigate }) {
                     className="btn-primary"
                     onClick={() => {
                       alert(
-                        `Payment initiated for invoice ${selectedInvoice.number} (₹${selectedInvoice.outstanding}). In live mode, this connects to Member 4's /api/payments/ endpoint.`
+                        `Payment initiated for invoice ${selectedInvoice.number} (${formatMoney(selectedInvoice.outstanding)}). In live mode, this connects to Member 4's /api/payments/ endpoint.`
                       );
                       setSelectedInvoice(null);
                     }}
                   >
-                    Pay invoice now (₹{selectedInvoice.outstanding})
+                    Pay invoice now ({formatMoney(selectedInvoice.outstanding)})
                   </button>
                 )}
             </div>

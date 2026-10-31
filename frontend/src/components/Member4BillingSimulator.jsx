@@ -81,12 +81,23 @@ export default function Member4BillingSimulator() {
                   <strong>{item.period_start} to {item.period_end}</strong>
                 </div>
 
+                <div style={{ fontSize: "var(--font-size-small)", marginTop: "4px", color: "var(--color-text-secondary)" }}>
+                  <span>Payment Terms: </span>
+                  <strong>
+                    {item.payment_terms_days === 0
+                      ? "Immediate (0 days)"
+                      : item.payment_terms_days !== undefined
+                      ? `Net ${item.payment_terms_days} days`
+                      : "Default (30 days)"}
+                  </strong>
+                </div>
+
                 <div className="lines-summary">
                   <strong>Lines to Invoice:</strong>
                   <ul>
                     {item.lines.map((l, i) => (
                       <li key={i}>
-                        {l.product_name} &times; {l.quantity} @ ₹{Number(l.unit_price).toFixed(2)}
+                        {l.product_name} &times; {l.quantity} @ ₹{String(l.unit_price)}
                       </li>
                     ))}
                   </ul>

@@ -262,7 +262,7 @@
 /* Clean Top Navigation Bar — No Stray Chrome */
 .topbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   padding: var(--space-3) var(--space-5);
   background-color: var(--color-vanilla);
@@ -270,44 +270,10 @@
   gap: var(--space-4);
 }
 
-.topbar-search {
+.topbar-right {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  background-color: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 6px var(--space-3);
-  width: 100%;
-  max-width: 380px;
-  transition: border-color 0.15s ease;
-}
-
-.topbar-search:focus-within {
-  border-color: var(--color-midnight-indigo);
-}
-
-.topbar-search input {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-base);
-  padding: 0;
-}
-
-.topbar-search input::placeholder {
-  color: var(--color-text-secondary);
-}
-
-.search-icon {
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: var(--space-3);
 }
 
 .topbar-bell-btn {
@@ -341,31 +307,6 @@
   border-radius: var(--radius-full);
   background-color: var(--color-status-overdue-text);
   border: 1.5px solid var(--color-vanilla);
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.role-select-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-small);
-  color: var(--color-text-secondary);
-}
-
-.role-select-box select {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: var(--font-size-small);
-  color: var(--color-text-primary);
-  font-weight: 500;
-  cursor: pointer;
 }
 
 .content-area {
