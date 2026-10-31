@@ -57,7 +57,6 @@ class Invoice(models.Model):
         max_length=32,
         unique=True,
         editable=False,
-        db_index=True,
         help_text="Unique auto-generated invoice reference (e.g. INV-2026-00001).",
     )
     # Plain reference for now; becomes a real FK when subscriptions models are merged.
@@ -69,7 +68,6 @@ class Invoice(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="invoices",
-        db_index=True,
     )
     period_start = models.DateField(
         help_text="Start date of the subscription billing period.",
@@ -126,7 +124,8 @@ class Invoice(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["subscription_id", "period_start"],
-                name="unique_subscription_period_start",
+                condition=~models.Q(status="cancelled"),
+                name="unique_subscription_period_start_active",
             ),
             models.CheckConstraint(
                 condition=models.Q(subtotal__gte=Decimal("0.00")),
@@ -152,12 +151,18 @@ class Invoice(models.Model):
                 condition=models.Q(amount_paid__lte=models.F("total")),
                 name="invoice_amount_paid_lte_total",
             ),
+            models.CheckConstraint(
+                condition=models.Q(due_date__gte=models.F("issue_date")),
+                name="invoice_due_date_gte_issue_date",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(period_end__gte=models.F("period_start")),
+                name="invoice_period_end_gte_period_start",
+            ),
         ]
         indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["due_date"]),
-            models.Index(fields=["customer"]),
-            models.Index(fields=["subscription_id"]),
+            models.Index(fields=["status", "due_date"]),
+            models.Index(fields=["customer", "status"]),
         ]
 
     def __str__(self):
@@ -167,6 +172,8 @@ class Invoice(models.Model):
         super().clean()
         if self.issue_date and self.due_date and self.due_date < self.issue_date:
             raise ValidationError({"due_date": "Invoice due_date cannot precede issue_date."})
+        if self.period_start and self.period_end and self.period_end < self.period_start:
+            raise ValidationError({"period_end": "Invoice period_end cannot precede period_start."})
         if self.amount_paid is not None and self.total is not None and self.amount_paid > self.total:
             raise ValidationError({"amount_paid": "amount_paid cannot exceed total."})
 
@@ -190,8 +197,15 @@ class Invoice(models.Model):
             tax_total = sum(tax_amount)
             total = subtotal - discount_total + tax_total
 
+        Guards: Raises ValidationError unless status == draft.
         Guaranteed: Does NOT alter invoice status or amount_paid.
         """
+        if self.status != self.Status.DRAFT:
+            raise ValidationError(
+                f"Cannot recalculate totals on invoice {self.number or self.id}: "
+                f"current status is '{self.status}', but totals can only be recalculated on '{self.Status.DRAFT}' invoices."
+            )
+
         lines = list(self.lines.all())
         new_subtotal = Decimal("0.00")
         new_discount_total = Decimal("0.00")
@@ -328,6 +342,10 @@ class InvoiceLine(models.Model):
                 condition=models.Q(tax_amount__gte=Decimal("0.00")),
                 name="invoiceline_tax_amount_gte_0",
             ),
+            models.CheckConstraint(
+                condition=models.Q(discount_amount__lte=models.F("quantity") * models.F("unit_price")),
+                name="invoiceline_discount_lte_subtotal",
+            ),
         ]
 
     def __str__(self):
@@ -362,8 +380,13 @@ class InvoiceLine(models.Model):
         if self.tax_amount is not None and self.tax_amount < Decimal("0.00"):
             raise ValidationError({"tax_amount": "tax_amount cannot be negative."})
 
+        # Discount must not exceed line subtotal
+        if self.quantity is not None and self.unit_price is not None and self.discount_amount is not None:
+            subtotal = Decimal(self.quantity) * self.unit_price
+            if self.discount_amount > subtotal:
+                raise ValidationError({"discount_amount": "Discount amount cannot exceed line subtotal (quantity * unit_price)."})
+
     def save(self, *args, **kwargs):
-        # Automatic total calculation: if line_total is zero/unset, compute via canonical formula
-        if self.line_total is None or self.line_total == Decimal("0.00"):
-            self.line_total = self.compute_line_total()
+        # Recompute line_total on EVERY save via compute_line_total()
+        self.line_total = self.compute_line_total()
         super().save(*args, **kwargs)
