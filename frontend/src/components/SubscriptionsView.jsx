@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { getSubscriptions } from "../api/subscriptions";
+import { useAuth } from "../context/AuthContext";
 import SubscriptionPipeline from "./SubscriptionPipeline";
 
 export default function SubscriptionsView() {
+  const { user } = useAuth();
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSub, setSelectedSub] = useState(null);
@@ -19,6 +21,7 @@ export default function SubscriptionsView() {
       setSubscriptions(res.results || res || []);
     } catch (err) {
       console.error("Failed to load subscriptions", err);
+      setSubscriptions([]);
     } finally {
       setLoading(false);
     }
@@ -26,7 +29,7 @@ export default function SubscriptionsView() {
 
   useEffect(() => {
     loadSubscriptions();
-  }, [statusFilter]);
+  }, [statusFilter, user]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -84,8 +87,17 @@ export default function SubscriptionsView() {
             <div className="loading-state">Loading subscriptions...</div>
           ) : subscriptions.length === 0 ? (
             <div className="empty-state">
-              <p>No subscriptions found matching the selected filters.</p>
-              <small>Create a quotation in the Quotations tab and convert it to start a new subscription pipeline!</small>
+              {!user ? (
+                <>
+                  <p>🔒 You are currently viewing as guest.</p>
+                  <small>Use the <strong>1-Click Test Login</strong> buttons in the header above (e.g. <strong>Sales Rep 👤</strong> or <strong>Customer 🏢</strong>) to view and manage live contracts!</small>
+                </>
+              ) : (
+                <>
+                  <p>No subscriptions found matching the selected filters for your role ({user.role || "User"}).</p>
+                  <small>Create a quotation in the Quotations tab and convert it to start a new subscription pipeline!</small>
+                </>
+              )}
             </div>
           ) : (
             <div className="subscriptions-grid">

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { AuthProvider } from "./context/AuthContext";
-import { initializeCsrf } from "./api/auth";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import SubscriptionsView from "./components/SubscriptionsView";
 import QuotationsView from "./components/QuotationsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import "./App.css";
 
 function MainContent() {
+  const { user, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("subscriptions");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
 
@@ -22,9 +23,28 @@ function MainContent() {
       .catch(() => setBackendStatus("Could not connect to Django"));
   }, []);
 
+  async function handleQuickLogin(email, password) {
+    try {
+      await initializeCsrf();
+      const res = await login(email, password);
+      setUser(res.data || { email });
+    } catch (err) {
+      alert("Login failed: " + (err?.message || "Invalid credentials"));
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+      setUser(null);
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
+  }
+
   return (
     <div className="app-layout">
-      {/* Top Navigation Bar */}
+      {/* Top Header */}
       <header className="app-header">
         <div className="brand-group">
           <div className="brand-badge">Member 3</div>
@@ -34,9 +54,43 @@ function MainContent() {
           </div>
         </div>
 
-        <div className="status-indicator">
-          <span className="status-dot online"></span>
-          <span>{backendStatus}</span>
+        <div className="header-right">
+          <div className="status-indicator">
+            <span className="status-dot online"></span>
+            <span>{backendStatus}</span>
+          </div>
+
+          {/* Quick Demo Login Switcher */}
+          <div className="auth-box">
+            {user ? (
+              <div className="logged-in-user">
+                <span>👤 <strong>{user.email}</strong> ({user.role || "Active"})</span>
+                <button className="btn-sm btn-secondary" onClick={handleLogout}>Log Out</button>
+              </div>
+            ) : (
+              <div className="quick-login-bar">
+                <span className="login-hint">1-Click Test Login:</span>
+                <button
+                  className="btn-sm btn-primary"
+                  onClick={() => handleQuickLogin("sales@example.com", "Staff123!")}
+                >
+                  Sales Rep 👤
+                </button>
+                <button
+                  className="btn-sm btn-accent"
+                  onClick={() => handleQuickLogin("acme@corp.com", "Customer123!")}
+                >
+                  Customer 🏢
+                </button>
+                <button
+                  className="btn-sm btn-secondary"
+                  onClick={() => handleQuickLogin("admin@example.com", "Admin123!")}
+                >
+                  Admin 🛡️
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
