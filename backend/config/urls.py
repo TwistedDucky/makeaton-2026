@@ -12,6 +12,10 @@ urlpatterns = [
     # Authentication
     path("api/auth/", include("apps.accounts.urls")),
 
+    # Subscriptions & Sales
+    path("api/subscriptions/", include("apps.subscriptions.urls")),
+    path("api/sales/", include("apps.sales.urls")),
+
     # API documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

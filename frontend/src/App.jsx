@@ -1,26 +1,79 @@
 import { useEffect, useState } from "react";
 import { initializeCsrf } from "./api/auth";
+import SubscriptionsView from "./components/SubscriptionsView";
+import QuotationsView from "./components/QuotationsView";
+import Member4BillingSimulator from "./components/Member4BillingSimulator";
+import "./App.css";
 
 function App() {
-  const [message, setMessage] = useState("Connecting to Django...");
+  const [activeTab, setActiveTab] = useState("subscriptions");
+  const [backendStatus, setBackendStatus] = useState("Connecting...");
 
   useEffect(() => {
     initializeCsrf()
       .then((data) => {
         if (data.success) {
-          setMessage("Connected to Django backend! (CSRF cookie initialized)");
+          setBackendStatus("Connected (Session & CSRF Ready)");
         } else {
-          setMessage("Failed to verify backend connection");
+          setBackendStatus("CSRF initialization failed");
         }
       })
-      .catch(() => setMessage("Could not connect to Django"));
+      .catch(() => setBackendStatus("Could not connect to Django"));
   }, []);
 
   return (
-    <main>
-      <h1>Hackathon Starter</h1>
-      <p>{message}</p>
-    </main>
+    <div className="app-layout">
+      {/* Top Navigation Bar */}
+      <header className="app-header">
+        <div className="brand-group">
+          <div className="brand-badge">Member 3</div>
+          <div>
+            <h1>Subscription & Contracts Engine</h1>
+            <p className="brand-subtitle">State Machine Pipeline, Contract Records, & Quotation Templates</p>
+          </div>
+        </div>
+
+        <div className="status-indicator">
+          <span className="status-dot online"></span>
+          <span>{backendStatus}</span>
+        </div>
+      </header>
+
+      {/* Primary Tab Navigation */}
+      <nav className="tab-navigation">
+        <button
+          className={`tab-button ${activeTab === "subscriptions" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("subscriptions")}
+        >
+          📋 Subscriptions & Pipeline
+        </button>
+        <button
+          className={`tab-button ${activeTab === "quotations" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("quotations")}
+        >
+          💼 Quotations & Templates
+        </button>
+        <button
+          className={`tab-button ${activeTab === "billing-hook" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("billing-hook")}
+        >
+          ⚡ Member 4 Billing Hooks
+        </button>
+      </nav>
+
+      {/* Content Body */}
+      <main className="app-main-content">
+        {activeTab === "subscriptions" && <SubscriptionsView />}
+        {activeTab === "quotations" && (
+          <QuotationsView
+            onConvertedToSubscription={() => {
+              setActiveTab("subscriptions");
+            }}
+          />
+        )}
+        {activeTab === "billing-hook" && <Member4BillingSimulator />}
+      </main>
+    </div>
   );
 }
 
