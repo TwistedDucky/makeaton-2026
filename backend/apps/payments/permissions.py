@@ -1,6 +1,16 @@
 """
 Permission classes for the payments app.
-Will be implemented in upcoming tasks.
 """
+from rest_framework.permissions import BasePermission, IsAuthenticated
+from common.permissions import IsAdmin, IsStaffOrAdmin
 
-from rest_framework.permissions import BasePermission
+
+class IsCustomer(BasePermission):
+    """Allows access only to authenticated users with role CUSTOMER."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, "role", None) == "CUSTOMER"
+        )
