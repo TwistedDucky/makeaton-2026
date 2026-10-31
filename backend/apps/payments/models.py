@@ -96,7 +96,11 @@ class PaymentAllocation(models.Model):
             models.CheckConstraint(
                 condition=models.Q(amount__gt=Decimal("0.00")),
                 name="payment_allocation_amount_gt_0",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["payment", "invoice"],
+                name="unique_payment_invoice_allocation",
+            ),
         ]
         indexes = [
             models.Index(fields=["payment"]),

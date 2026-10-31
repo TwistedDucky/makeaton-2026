@@ -1,46 +1,64 @@
 """
-Integrations and external service stubs for the billing app.
+Integrations and external service adapters for the billing app.
 
-These functions act as anti-corruption layers and interface contracts for
-functionality owned by other members (Subscriptions, Catalog, Sales).
+This module acts as the anti-corruption layer and single point of integration
+with external domains (apps.subscriptions, apps.catalog, apps.sales).
 
-All functions below are currently typed stubs returning realistic mock data
-until real implementations are provided by teammates.
+Integration Architecture & Migration Path:
+------------------------------------------
+USE_REAL_SERVICES is a feature flag. When False (current state), this module
+returns realistic mock data conforming strictly to agreed teammate contracts.
+When True (future integration task once teammates merge their service modules),
+the functions in this module will import and invoke the real services:
+- apps.subscriptions.services.get_due_subscriptions
+- apps.subscriptions.services.advance_next_billing_date
+- apps.catalog.services.price_invoice (once implemented by Member 2)
+- apps.catalog.services.record_discount_usage (once implemented by Member 2)
 """
 
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
+
+USE_REAL_SERVICES = False
+TWOPLACES = Decimal("0.01")
 
 
 def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, Any]]:
     """
-    Fetch all active subscriptions due for billing on or before target_date.
+    Fetch active subscriptions due for billing on or before target_date.
 
-    # TODO: Replace stub when service is available.
-    Interface owned by Member 3 (subscription state machine and quotations).
+    Contract with Member 3 (apps.subscriptions.services):
+    - Multi-period rule: Returns exactly ONE period per subscription per invocation (oldest due period first).
+      Subsequent missed periods are retrieved on successive billing cycles after advance_next_billing_date() is called.
+    - Currency: Platform is strictly single-currency. No currency field is present.
+    - Pricing: `unit_price` on each line item already includes any variant price adjustments.
 
-    Expected Return Data Structure (Contract):
+    Expected Return Structure:
     [
         {
             "id": int,                     # Primary key of Subscription
             "customer_id": int,            # Primary key of User (accounts.User)
-            "period_start": date,          # Start of this billing period (inclusive)
-            "period_end": date,            # End of this billing period (inclusive)
-            "lines": [                     # Line items to be billed
+            "period_start": date,          # Start date of this billing period (inclusive)
+            "period_end": date,            # End date of this billing period (inclusive)
+            "lines": [
                 {
-                    "product_id": int,     # ID of the plan/add-on product in catalog
-                    "product_name": str,   # Display name (e.g. "Standard Subscription")
-                    "quantity": int,       # Quantity (e.g. 1)
-                    "unit_price": Decimal, # Unit price (e.g. Decimal("50.00"))
+                    "product_id": int,            # Catalog Product ID
+                    "variant_id": Optional[int],  # Optional Catalog ProductVariant ID
+                    "product_name": str,          # Descriptive display name (e.g. "Plan - Variant")
+                    "quantity": int,              # Line quantity
+                    "unit_price": Decimal,        # Unit price (including variant extra_price)
                 }
             ],
         }
     ]
     """
+    if USE_REAL_SERVICES:
+        # TODO: Wire to `from apps.subscriptions.services import get_due_subscriptions as _get_due`
+        pass
+
     billing_date = target_date or date.today()
     period_start = billing_date.replace(day=1)
-    # Approximate end of month
     period_end = (period_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
     return [
@@ -52,15 +70,17 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
             "lines": [
                 {
                     "product_id": 1,
-                    "product_name": "Premium Plan Monthly",
+                    "variant_id": 10,
+                    "product_name": "Premium Cloud Suite - 50GB",
                     "quantity": 1,
                     "unit_price": Decimal("99.00"),
                 },
                 {
                     "product_id": 2,
-                    "product_name": "Additional Storage 50GB",
-                    "quantity": 2,
-                    "unit_price": Decimal("10.00"),
+                    "variant_id": None,
+                    "product_name": "Priority Support Add-on",
+                    "quantity": 1,
+                    "unit_price": Decimal("20.00"),
                 },
             ],
         },
@@ -72,9 +92,10 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
             "lines": [
                 {
                     "product_id": 3,
-                    "product_name": "Basic Plan Monthly",
+                    "variant_id": None,
+                    "product_name": "Standard Plan Monthly",
                     "quantity": 1,
-                    "unit_price": Decimal("29.00"),
+                    "unit_price": Decimal("30.00"),
                 }
             ],
         },
@@ -83,100 +104,162 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
 
 def advance_next_billing_date(subscription_id: int) -> Dict[str, Any]:
     """
-    Advance the subscription's next_billing_date to the next cycle.
+    Advance subscription's billing schedule by one billing period.
 
-    # TODO: Replace stub when service is available.
-    Interface owned by Member 3 (subscription state machine and quotations).
+    Contract with Member 3 (apps.subscriptions.services):
+    - Idempotent and safe to invoke after successful invoice creation.
+    - Updates subscription.current_period_start, current_period_end, and next_billing_date.
+    - If plan.auto_close is true and expiry_date has passed, marks subscription as CLOSED.
 
-    Expected Return Data Structure (Contract):
+    Expected Return Structure:
     {
         "subscription_id": int,
         "next_billing_date": date,
-        "status": str,  # "active", "updated"
+        "status": str,  # e.g. "ACTIVE" or "CLOSED"
     }
     """
+    if USE_REAL_SERVICES:
+        # TODO: Wire to `from apps.subscriptions.services import advance_next_billing_date as _advance`
+        pass
+
     return {
         "subscription_id": subscription_id,
         "next_billing_date": date.today() + timedelta(days=30),
-        "status": "updated",
+        "status": "ACTIVE",
     }
 
 
-def calculate_tax(line: Dict[str, Any]) -> Decimal:
+def price_invoice_lines(
+    lines: List[Dict[str, Any]],
+    billing_date: Optional[date] = None,
+) -> Dict[str, Any]:
     """
-    Calculate tax amount for an invoice line item.
-    Tax is calculated on the discounted amount (line_subtotal - discount_amount).
+    Unified pricing adapter providing pure calculation for invoice lines.
 
-    # TODO: Replace stub when service is available.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
+    Contract with Member 2 (apps.catalog):
+    - Pure Calculation: MUST NOT record DiscountUsage or mutate database state.
+      Previewing or draft generation must not consume promotional usage limits.
+    - Discounts: Applies eligible discounts by product or subscription scope.
+      Discount cannot exceed line subtotal.
+    - Taxes: Tax is computed on the discounted amount (line_subtotal - discount_amount).
+    - Rounding: All money fields quantized to 2 decimal places with ROUND_HALF_UP.
 
-    Expected Input Structure:
-    {
-        "product_name": str,
-        "quantity": int,
-        "unit_price": Decimal,
-        "discount_amount": Optional[Decimal],
-    }
-
-    Returns:
-        Decimal: Calculated tax amount (e.g. 10% standard rate on net price).
-    """
-    quantity = line.get("quantity", 1)
-    unit_price = line.get("unit_price", Decimal("0.00"))
-    discount = line.get("discount_amount", Decimal("0.00"))
-    line_subtotal = Decimal(quantity) * Decimal(unit_price)
-    discounted_subtotal = max(Decimal("0.00"), line_subtotal - Decimal(discount))
-    tax_rate = Decimal("0.10")  # 10% default mock tax rate
-    return (discounted_subtotal * tax_rate).quantize(Decimal("0.01"))
-
-
-def get_applicable_discounts(subscription_id: int) -> List[Dict[str, Any]]:
-    """
-    Retrieve active discounts and promotional codes applicable to a subscription.
-
-    # TODO: Replace stub when service is available.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
-
-    Expected Return Data Structure (Contract):
+    Input Lines Structure:
     [
         {
-            "id": int,                   # Primary key of discount/coupon
-            "code": str,                 # Coupon/promo code (e.g. "LAUNCH2026")
-            "description": str,          # User-friendly description
-            "discount_type": str,        # "fixed" or "percentage"
-            "value": Decimal,            # Percentage rate or fixed deduction
-            "applicable_amount": Decimal # Max or computed discount amount
+            "product_id": int,
+            "variant_id": Optional[int],
+            "product_name": str,
+            "quantity": int,
+            "unit_price": Decimal,
+        }
+    ]
+
+    Expected Return Structure:
+    {
+        "lines": [
+            {
+                "product_id": int,
+                "variant_id": Optional[int],
+                "discount_id": Optional[int],  # Populated if a catalog discount applied
+                "discount_amount": Decimal,
+                "tax_amount": Decimal,
+                "line_total": Decimal,
+            }
+        ],
+        "totals": {
+            "subtotal": Decimal,
+            "discount_total": Decimal,
+            "tax_total": Decimal,
+            "total": Decimal,
+        }
+    }
+    """
+    if USE_REAL_SERVICES:
+        # TODO: Wire to Member 2's `apps.catalog.services.price_invoice`
+        pass
+
+    priced_lines = []
+    subtotal = Decimal("0.00")
+    discount_total = Decimal("0.00")
+    tax_total = Decimal("0.00")
+
+    # Standard mock calculation: 10% discount on first line (if applicable), 10% tax on net
+    for idx, item in enumerate(lines):
+        qty = Decimal(item.get("quantity", 1))
+        unit_price = Decimal(str(item.get("unit_price", "0.00")))
+        line_subtotal = (qty * unit_price).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+        # Mock: 10% promo discount on first line only
+        discount_id = 1 if idx == 0 and line_subtotal > Decimal("0.00") else None
+        discount_amount = (
+            (line_subtotal * Decimal("0.10")).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+            if discount_id
+            else Decimal("0.00")
+        )
+
+        discounted_sub = max(Decimal("0.00"), line_subtotal - discount_amount)
+        # Mock 10% tax rate on discounted amount
+        tax_amount = (discounted_sub * Decimal("0.10")).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+        line_total = (discounted_sub + tax_amount).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+        priced_lines.append({
+            "product_id": item.get("product_id"),
+            "variant_id": item.get("variant_id"),
+            "discount_id": discount_id,
+            "discount_amount": discount_amount,
+            "tax_amount": tax_amount,
+            "line_total": line_total,
+        })
+
+        subtotal += line_subtotal
+        discount_total += discount_amount
+        tax_total += tax_amount
+
+    total = (subtotal - discount_total + tax_total).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+    return {
+        "lines": priced_lines,
+        "totals": {
+            "subtotal": subtotal,
+            "discount_total": discount_total,
+            "tax_total": tax_total,
+            "total": total,
+        },
+    }
+
+
+def redeem_discounts(
+    discount_ids: List[int],
+    invoice_id: int,
+    subscription_id: int,
+) -> List[Dict[str, Any]]:
+    """
+    Record discount usage once an invoice is confirmed.
+
+    Contract with Member 2 (apps.catalog):
+    - Separate State Mutation: Records DiscountUsage rows (fields: discount, invoice_id, subscription_id)
+      and increments Discount.used_count.
+    - Executed strictly upon invoice confirmation, never during draft preview.
+
+    Expected Return Structure:
+    [
+        {
+            "discount_id": int,
+            "invoice_id": int,
+            "recorded": bool,
         }
     ]
     """
+    if USE_REAL_SERVICES:
+        # TODO: Wire to Member 2's `apps.catalog.services.record_discount_usage`
+        pass
+
     return [
         {
-            "id": 1,
-            "code": "EARLYBIRD10",
-            "description": "10% Early Bird Promotional Discount",
-            "discount_type": "percentage",
-            "value": Decimal("10.00"),
-            "applicable_amount": Decimal("10.00"),
+            "discount_id": d_id,
+            "invoice_id": invoice_id,
+            "recorded": True,
         }
+        for d_id in discount_ids
     ]
-
-
-def redeem(discount_id: int) -> Dict[str, Any]:
-    """
-    Mark a promotional code or discount as redeemed/applied to prevent re-use.
-
-    # TODO: Replace stub when service is available.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
-
-    Expected Return Data Structure (Contract):
-    {
-        "discount_id": int,
-        "redeemed": bool,
-        "redeemed_at": str,
-    }
-    """
-    return {
-        "discount_id": discount_id,
-        "redeemed": True,
-        "message": f"Discount {discount_id} marked as redeemed.",
-    }
