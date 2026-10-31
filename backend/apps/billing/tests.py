@@ -1,6 +1,8 @@
+import inspect
 import threading
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -597,3 +599,142 @@ class InvoiceNumberConcurrencyTests(TransactionTestCase):
         self.assertEqual(len(set(created_numbers)), num_threads)
         expected_seqs = list(range(sorted_seqs[0], sorted_seqs[0] + num_threads))
         self.assertEqual(sorted_seqs, expected_seqs, f"Expected contiguous sequence {expected_seqs}, got {sorted_seqs}")
+
+
+class BillingIntegrationsTestCase(TestCase):
+    """
+    Unit tests for billing external service integrations and adapters.
+    """
+
+    @patch("apps.subscriptions.services.get_due_subscriptions")
+    def test_get_due_subscriptions_real_wiring(self, mock_get_due):
+        from apps.billing import integrations
+
+        sample_due = [
+            {
+                "id": 42,
+                "customer_id": 7,
+                "period_start": date(2026, 3, 1),
+                "period_end": date(2026, 3, 31),
+                "lines": [
+                    {
+                        "product_id": 10,
+                        "product_name": "Standard Plan",
+                        "quantity": 1,
+                        "unit_price": Decimal("50.00"),
+                        # Note: variant_id omitted by Member 3's service
+                    }
+                ],
+            }
+        ]
+        mock_get_due.return_value = sample_due
+
+        result = integrations.get_due_subscriptions(target_date=date(2026, 3, 15))
+
+        mock_get_due.assert_called_once_with(date(2026, 3, 15))
+        self.assertEqual(len(result), 1)
+        sub = result[0]
+        self.assertEqual(sub["id"], 42)
+        self.assertEqual(len(sub["lines"]), 1)
+        # Normalization check: variant_id exists and defaults to None
+        self.assertIn("variant_id", sub["lines"][0])
+        self.assertIsNone(sub["lines"][0]["variant_id"])
+
+    @patch("apps.subscriptions.services.get_due_subscriptions")
+    def test_get_due_subscriptions_missing_period_dates_raises(self, mock_get_due):
+        from apps.billing import integrations
+
+        # Missing period_start
+        mock_get_due.return_value = [
+            {
+                "id": 999,
+                "customer_id": 7,
+                "period_start": None,
+                "period_end": date(2026, 3, 31),
+                "lines": [],
+            }
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            integrations.get_due_subscriptions(target_date=date(2026, 3, 15))
+        self.assertIn("999", str(ctx.exception))
+
+        # Missing period_end
+        mock_get_due.return_value = [
+            {
+                "id": 888,
+                "customer_id": 7,
+                "period_start": date(2026, 3, 1),
+                "period_end": None,
+                "lines": [],
+            }
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            integrations.get_due_subscriptions(target_date=date(2026, 3, 15))
+        self.assertIn("888", str(ctx.exception))
+
+    @patch("apps.subscriptions.services.advance_next_billing_date")
+    def test_advance_next_billing_date_normalizes_status(self, mock_advance):
+        from apps.billing import integrations
+
+        mock_advance.return_value = {
+            "subscription_id": 55,
+            "next_billing_date": date(2026, 4, 1),
+            "status": "active",  # lowercase status from service
+        }
+        res = integrations.advance_next_billing_date(55)
+
+        mock_advance.assert_called_once_with(55)
+        self.assertEqual(res["subscription_id"], 55)
+        self.assertEqual(res["status"], "ACTIVE")
+
+    @patch("apps.subscriptions.services.get_due_subscriptions")
+    @patch("apps.subscriptions.services.advance_next_billing_date")
+    def test_integrations_fallback_flag(self, mock_advance, mock_get_due):
+        from apps.billing import integrations
+
+        with patch.object(integrations, "USE_REAL_SUBSCRIPTIONS", False):
+            due_subs = integrations.get_due_subscriptions()
+            mock_get_due.assert_not_called()
+            self.assertTrue(len(due_subs) > 0)
+            self.assertEqual(due_subs[0]["id"], 101)
+
+            adv_res = integrations.advance_next_billing_date(101)
+            mock_advance.assert_not_called()
+            self.assertEqual(adv_res["subscription_id"], 101)
+            self.assertEqual(adv_res["status"], "ACTIVE")
+
+    def test_real_service_signature_compatibility(self):
+        from apps.subscriptions import services as sub_services
+
+        # get_due_subscriptions must accept target_date
+        sig_due = inspect.signature(sub_services.get_due_subscriptions)
+        self.assertIn("target_date", sig_due.parameters)
+
+        # advance_next_billing_date must accept subscription_id
+        sig_adv = inspect.signature(sub_services.advance_next_billing_date)
+        self.assertIn("subscription_id", sig_adv.parameters)
+
+    def test_pricing_stub_warning(self):
+        from apps.billing import integrations
+
+        self.assertFalse(integrations.USE_REAL_PRICING)
+        lines = [
+            {
+                "product_id": 1,
+                "product_name": "Test Product",
+                "quantity": 2,
+                "unit_price": Decimal("25.00"),
+            }
+        ]
+        result = integrations.price_invoice_lines(lines)
+        self.assertIn("lines", result)
+        self.assertIn("totals", result)
+        self.assertEqual(result["totals"]["subtotal"], Decimal("50.00"))
+
+        # Verify backward-compatibility stubs also work
+        tax = integrations.calculate_tax(lines[0])
+        self.assertIsInstance(tax, Decimal)
+        discounts = integrations.get_applicable_discounts(subscription_id=1)
+        self.assertIsInstance(discounts, list)
+        redeem_res = integrations.redeem(discount_id=1)
+        self.assertTrue(redeem_res["redeemed"])
