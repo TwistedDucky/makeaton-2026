@@ -28,7 +28,7 @@ from .models import quantize_money
 
 USE_REAL_SUBSCRIPTIONS = True       # True = call apps.subscriptions.services
 USE_REAL_PRICING = True             # True = call apps.catalog.services.price_invoice
-USE_REAL_DISCOUNT_USAGE = False     # True = call apps.catalog.services.record_discount_usage
+USE_REAL_DISCOUNT_USAGE = True      # True = call apps.catalog.services.record_discount_usage
 
 DEFAULT_PAYMENT_TERMS_DAYS = 30
 

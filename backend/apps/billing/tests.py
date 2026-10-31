@@ -2369,3 +2369,368 @@ class InvoiceGenerationTransactionTests(TransactionTestCase):
         self.assertFalse(Invoice.objects.filter(subscription_id=802).exists())
         self.assertIn(801, fake.advanced_calls)
         self.assertNotIn(802, fake.advanced_calls)
+
+
+class RealDiscountUsageIntegrationTests(TransactionTestCase):
+    def setUp(self):
+        from apps.catalog.models import Discount, DiscountUsage, Product, Tax, Product, Tax
+
+        self.customer = User.objects.create_user(
+            email="disc_customer@example.com",
+            password="testpassword123",
+            role=User.Role.CUSTOMER,
+        )
+        self.tax = Tax.objects.create(
+            name="VAT 10%",
+            kind=Tax.Kind.PERCENT,
+            rate=Decimal("10.00"),
+            is_active=True,
+        )
+        self.product = Product.objects.create(
+            name="Cloud Server",
+            type="service",
+            sales_price=Decimal("100.00"),
+            cost_price=Decimal("50.00"),
+            tax=self.tax,
+            is_active=True,
+        )
+        self.today = timezone.localdate()
+
+    def test_confirm_draft_increments_used_count_and_creates_discount_usage(self):
+        """
+        Confirm of a draft with one discount increments Discount.used_count by 1
+        and creates one DiscountUsage(discount, invoice_id).
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice, InvoiceDiscount, InvoiceLine
+        from apps.billing.services import confirm_invoice
+        from apps.catalog.models import Discount, DiscountUsage, Product, Tax
+
+        discount = Discount.objects.create(
+            name="Launch 10%",
+            kind=Discount.Kind.PERCENT,
+            value=Decimal("10.00"),
+            start_date=self.today - timedelta(days=2),
+            end_date=self.today + timedelta(days=30),
+            usage_limit=5,
+            used_count=0,
+            scope=Discount.Scope.PRODUCT,
+            product=self.product,
+            is_active=True,
+        )
+
+        inv = Invoice.objects.create(
+            customer=self.customer,
+            subscription_id=301,
+            period_start=self.today,
+            period_end=self.today + timedelta(days=30),
+            issue_date=self.today,
+            due_date=self.today + timedelta(days=15),
+            status=Invoice.Status.DRAFT,
+        )
+        InvoiceLine.objects.create(
+            invoice=inv,
+            product_id=self.product.id,
+            product_name=self.product.name,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            tax_id=self.tax.id,
+            discount_amount=Decimal("10.00"),
+            tax_amount=Decimal("9.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=inv,
+            discount_id=discount.id,
+            amount=Decimal("10.00"),
+        )
+        inv.recalculate_totals()
+        self.assertEqual(inv.total, Decimal("99.00"))
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            res = confirm_invoice(inv)
+
+        inv.refresh_from_db()
+        discount.refresh_from_db()
+
+        self.assertEqual(inv.status, Invoice.Status.CONFIRMED)
+        self.assertFalse(res.amounts_changed)
+        self.assertEqual(discount.used_count, 1)
+
+        usage = DiscountUsage.objects.filter(discount=discount, invoice_id=inv.id)
+        self.assertEqual(usage.count(), 1)
+        self.assertEqual(usage.first().subscription_id, 301)
+
+    def test_redeem_discounts_is_idempotent(self):
+        """
+        Calling redeem_discounts again for the same invoice and discount is idempotent
+        (used_count unchanged, returns recorded).
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice, InvoiceDiscount, InvoiceLine
+        from apps.billing.services import confirm_invoice
+        from apps.catalog.models import Discount, DiscountUsage, Product, Tax
+
+        discount = Discount.objects.create(
+            name="Promo 10%",
+            kind=Discount.Kind.PERCENT,
+            value=Decimal("10.00"),
+            start_date=self.today - timedelta(days=2),
+            end_date=self.today + timedelta(days=30),
+            usage_limit=5,
+            used_count=0,
+            scope=Discount.Scope.PRODUCT,
+            product=self.product,
+            is_active=True,
+        )
+
+        inv = Invoice.objects.create(
+            customer=self.customer,
+            subscription_id=302,
+            period_start=self.today,
+            period_end=self.today + timedelta(days=30),
+            issue_date=self.today,
+            due_date=self.today + timedelta(days=15),
+            status=Invoice.Status.DRAFT,
+        )
+        InvoiceLine.objects.create(
+            invoice=inv,
+            product_id=self.product.id,
+            product_name=self.product.name,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            tax_id=self.tax.id,
+            discount_amount=Decimal("10.00"),
+            tax_amount=Decimal("9.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=inv,
+            discount_id=discount.id,
+            amount=Decimal("10.00"),
+        )
+        inv.recalculate_totals()
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            confirm_invoice(inv)
+            discount.refresh_from_db()
+            self.assertEqual(discount.used_count, 1)
+
+            # Second call to redeem_discounts
+            second_res = integrations.redeem_discounts([discount.id], inv.id, inv.subscription_id)
+            self.assertTrue(second_res.get("all_recorded"))
+            self.assertEqual(second_res.get("failed_ids"), [])
+
+            discount.refresh_from_db()
+            self.assertEqual(discount.used_count, 1)
+            self.assertEqual(DiscountUsage.objects.filter(discount=discount, invoice_id=inv.id).count(), 1)
+
+    def test_exhausted_discount_triggers_repricing_and_amounts_changed(self):
+        """
+        An exhausted discount (used_count == usage_limit) makes confirm re-price
+        (real pricing patched True) and the result has amounts_changed=True, with no usage row for it.
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice, InvoiceDiscount, InvoiceLine
+        from apps.billing.services import confirm_invoice
+        from apps.catalog.models import Discount, DiscountUsage, Product, Tax
+
+        discount = Discount.objects.create(
+            name="Limited 10%",
+            kind=Discount.Kind.PERCENT,
+            value=Decimal("10.00"),
+            start_date=self.today - timedelta(days=2),
+            end_date=self.today + timedelta(days=30),
+            usage_limit=1,
+            used_count=1,  # Exhausted!
+            scope=Discount.Scope.PRODUCT,
+            product=self.product,
+            is_active=True,
+        )
+
+        inv = Invoice.objects.create(
+            customer=self.customer,
+            subscription_id=303,
+            period_start=self.today,
+            period_end=self.today + timedelta(days=30),
+            issue_date=self.today,
+            due_date=self.today + timedelta(days=15),
+            status=Invoice.Status.DRAFT,
+        )
+        InvoiceLine.objects.create(
+            invoice=inv,
+            product_id=self.product.id,
+            product_name=self.product.name,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            tax_id=self.tax.id,
+            discount_amount=Decimal("10.00"),
+            tax_amount=Decimal("9.00"),
+        )
+        InvoiceDiscount.objects.create(
+            invoice=inv,
+            discount_id=discount.id,
+            amount=Decimal("10.00"),
+        )
+        inv.recalculate_totals()
+        old_total = inv.total
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(integrations, "USE_REAL_PRICING", True):
+                res = confirm_invoice(inv)
+
+        inv.refresh_from_db()
+        discount.refresh_from_db()
+
+        self.assertEqual(inv.status, Invoice.Status.CONFIRMED)
+        self.assertTrue(res.amounts_changed)
+        self.assertEqual(inv.total, Decimal("110.00"))
+        self.assertNotEqual(inv.total, old_total)
+        self.assertEqual(discount.used_count, 1)
+        self.assertFalse(DiscountUsage.objects.filter(discount=discount, invoice_id=inv.id).exists())
+
+    def test_two_discounts_second_exhausted_rolls_back_first_attempt_without_leak(self):
+        """
+        With two discounts where the second is exhausted: after the whole confirm,
+        the first discount's used_count and usage row reflect only the final successful attempt
+        (no leaked increment from the failed first attempt).
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice, InvoiceDiscount, InvoiceLine
+        from apps.billing.services import confirm_invoice
+        from apps.catalog.models import Discount, DiscountUsage, Product, Tax
+
+        product2 = Product.objects.create(
+            name="Database Instance",
+            type="service",
+            sales_price=Decimal("100.00"),
+            cost_price=Decimal("40.00"),
+            tax=self.tax,
+            is_active=True,
+        )
+
+        d1 = Discount.objects.create(
+            name="D1 Available",
+            kind=Discount.Kind.PERCENT,
+            value=Decimal("10.00"),
+            start_date=self.today - timedelta(days=2),
+            end_date=self.today + timedelta(days=30),
+            usage_limit=5,
+            used_count=0,
+            scope=Discount.Scope.PRODUCT,
+            product=self.product,
+            is_active=True,
+        )
+        d2 = Discount.objects.create(
+            name="D2 Exhausted",
+            kind=Discount.Kind.PERCENT,
+            value=Decimal("20.00"),
+            start_date=self.today - timedelta(days=2),
+            end_date=self.today + timedelta(days=30),
+            usage_limit=1,
+            used_count=1,
+            scope=Discount.Scope.PRODUCT,
+            product=product2,
+            is_active=True,
+        )
+        self.assertLess(d1.id, d2.id)
+
+        inv = Invoice.objects.create(
+            customer=self.customer,
+            subscription_id=304,
+            period_start=self.today,
+            period_end=self.today + timedelta(days=30),
+            issue_date=self.today,
+            due_date=self.today + timedelta(days=15),
+            status=Invoice.Status.DRAFT,
+        )
+        InvoiceLine.objects.create(
+            invoice=inv,
+            product_id=self.product.id,
+            product_name=self.product.name,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            tax_id=self.tax.id,
+            discount_amount=Decimal("10.00"),
+            tax_amount=Decimal("9.00"),
+        )
+        InvoiceLine.objects.create(
+            invoice=inv,
+            product_id=product2.id,
+            product_name=product2.name,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            tax_id=self.tax.id,
+            discount_amount=Decimal("20.00"),
+            tax_amount=Decimal("8.00"),
+        )
+        InvoiceDiscount.objects.create(invoice=inv, discount_id=d1.id, amount=Decimal("10.00"))
+        InvoiceDiscount.objects.create(invoice=inv, discount_id=d2.id, amount=Decimal("20.00"))
+        inv.recalculate_totals()
+
+        with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+            with patch.object(integrations, "USE_REAL_PRICING", True):
+                res = confirm_invoice(inv)
+
+        inv.refresh_from_db()
+        d1.refresh_from_db()
+        d2.refresh_from_db()
+
+        self.assertEqual(inv.status, Invoice.Status.CONFIRMED)
+        self.assertTrue(res.amounts_changed)
+        self.assertEqual(d1.used_count, 1)
+        self.assertEqual(DiscountUsage.objects.filter(discount=d1, invoice_id=inv.id).count(), 1)
+        self.assertEqual(d2.used_count, 1)
+        self.assertEqual(DiscountUsage.objects.filter(discount=d2, invoice_id=inv.id).count(), 0)
+        self.assertEqual(DiscountUsage.objects.filter(invoice_id=inv.id).count(), 1)
+
+    @patch("apps.subscriptions.services.get_due_subscriptions")
+    @patch("apps.subscriptions.services.advance_next_billing_date")
+    def test_generate_invoices_under_debug_false_with_real_integrations(
+        self, mock_advance, mock_get_due
+    ):
+        """
+        generate_invoices under override_settings(DEBUG=False) with
+        USE_REAL_SUBSCRIPTIONS, USE_REAL_PRICING, and USE_REAL_DISCOUNT_USAGE all True
+        (via patch.object, never bare assignment), asserting invoices are created and no
+        RuntimeError is raised.
+        """
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+        from apps.billing.services import generate_invoices
+
+        lines = [
+            {
+                "product_id": self.product.id,
+                "variant_id": None,
+                "product_name": self.product.name,
+                "quantity": 1,
+                "unit_price": Decimal("100.00"),
+                "tax_id": self.tax.id,
+            }
+        ]
+        due = [
+            {
+                "id": 9950,
+                "customer_id": self.customer.id,
+                "period_start": self.today,
+                "period_end": self.today + timedelta(days=30),
+                "lines": lines,
+                "payment_terms_days": 30,
+            }
+        ]
+        fake = FakeSubscriptionsService(due)
+        mock_get_due.side_effect = fake.get_due_subscriptions
+        mock_advance.side_effect = fake.advance_next_billing_date
+
+        with override_settings(DEBUG=False):
+            with patch.object(integrations, "USE_REAL_SUBSCRIPTIONS", True):
+                with patch.object(integrations, "USE_REAL_PRICING", True):
+                    with patch.object(integrations, "USE_REAL_DISCOUNT_USAGE", True):
+                        summary = generate_invoices()
+
+        self.assertEqual(summary.created, 1)
+        self.assertEqual(summary.errors, [])
+        inv = Invoice.objects.get(subscription_id=9950)
+        self.assertEqual(inv.status, Invoice.Status.DRAFT)
+        self.assertEqual(inv.total, Decimal("110.00"))
+
+
