@@ -229,12 +229,31 @@ class Invoice(models.Model):
     def confirm(self):
         """
         Transition invoice from draft -> confirmed.
+        Guarded: While USE_REAL_DISCOUNT_USAGE is False, refuses any invoice that has
+        InvoiceDiscount rows or any line with discount_amount > 0.
         """
         if self.status != self.Status.DRAFT:
             raise IllegalStatusTransitionError(
                 f"Cannot confirm invoice {self.number or self.id}: current status is '{self.status}', "
                 f"but only '{self.Status.DRAFT}' invoices can be confirmed."
             )
+
+        from .integrations import USE_REAL_DISCOUNT_USAGE
+
+        if not USE_REAL_DISCOUNT_USAGE:
+            has_invoice_discounts = self.discounts.exists() if self.pk else False
+            has_line_discounts = (
+                self.lines.filter(discount_amount__gt=Decimal("0.00")).exists()
+                if self.pk
+                else False
+            )
+            if has_invoice_discounts or has_line_discounts:
+                raise ValidationError(
+                    f"Cannot confirm invoice {self.number or self.id}: invoice has discounts applied "
+                    f"(InvoiceDiscount rows or line discount_amount > 0), but recording discount usage "
+                    f"is currently disabled (USE_REAL_DISCOUNT_USAGE is False)."
+                )
+
         self.status = self.Status.CONFIRMED
         self.save(update_fields=["status", "updated_at"])
 
@@ -299,6 +318,16 @@ class InvoiceLine(models.Model):
         blank=True,
         db_index=True,
         help_text="Catalog product ID reference; becomes real FK when catalog is merged.",
+    )
+    variant_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Catalog product variant ID reference; becomes real FK when catalog is merged.",
+    )
+    tax_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Catalog tax ID reference; becomes real FK when catalog is merged.",
     )
     product_name = models.CharField(max_length=255)
     quantity = models.PositiveIntegerField(default=1)
@@ -390,3 +419,46 @@ class InvoiceLine(models.Model):
         # Recompute line_total on EVERY save via compute_line_total()
         self.line_total = self.compute_line_total()
         super().save(*args, **kwargs)
+
+
+class InvoiceDiscount(models.Model):
+    """
+    Represents a discount deduction applied to an invoice.
+    References catalog discount via plain integer discount_id.
+    Amount is stored as a positive value.
+    """
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.CASCADE,
+        related_name="discounts",
+    )
+    discount_id = models.PositiveBigIntegerField(
+        help_text="Catalog discount ID reference; becomes real FK when catalog is merged.",
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Discount deduction amount stored as a positive value.",
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["invoice", "discount_id"],
+                name="unique_invoicediscount_invoice_discount",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=Decimal("0.00")),
+                name="invoicediscount_amount_gt_0",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Discount #{self.discount_id} on {self.invoice.number or self.invoice_id}: -{self.amount}"
+
+    def clean(self):
+        super().clean()
+        if self.amount is not None and self.amount <= Decimal("0.00"):
+            raise ValidationError({"amount": "Discount amount must be a positive value."})
