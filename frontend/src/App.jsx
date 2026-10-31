@@ -4,21 +4,41 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import DashboardView from "./components/DashboardView";
 import CustomersView from "./components/CustomersView";
-import CatalogView from "./components/CatalogView";
 import QuotationsView from "./components/QuotationsView";
 import SubscriptionsView from "./components/SubscriptionsView";
 import InvoicesView from "./components/InvoicesView";
 import PaymentsView from "./components/PaymentsView";
-import DiscountsView from "./components/DiscountsView";
 import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
+import "./features/catalog/catalog.css";
+import ProductsAdmin from "./features/catalog/ProductsAdmin";
+import PlansAdmin from "./features/catalog/PlansAdmin";
+import DiscountsAdmin from "./features/catalog/DiscountsAdmin";
+
 // Auth pages from Member 1
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
+
+import {
+  LayoutDashboard,
+  Users,
+  Briefcase,
+  FileText,
+  Package,
+  Tag,
+  Receipt,
+  CreditCard,
+  Zap,
+  TrendingUp,
+  Settings,
+  Shield,
+  Search,
+  LogOut,
+} from "lucide-react";
 
 import "./App.css";
 
@@ -109,7 +129,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "dashboard" ? "active" : ""}`}
             onClick={() => setCurrentModule("dashboard")}
           >
-            <span className="nav-icon">📊</span>
+            <span className="nav-icon"><LayoutDashboard size={18} /></span>
             <span>Dashboard</span>
           </button>
 
@@ -118,7 +138,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "customers" ? "active" : ""}`}
               onClick={() => setCurrentModule("customers")}
             >
-              <span className="nav-icon">👥</span>
+              <span className="nav-icon"><Users size={18} /></span>
               <span>Customers</span>
             </button>
           )}
@@ -128,7 +148,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "quotations" ? "active" : ""}`}
               onClick={() => setCurrentModule("quotations")}
             >
-              <span className="nav-icon">💼</span>
+              <span className="nav-icon"><Briefcase size={18} /></span>
               <span>Quotations</span>
             </button>
           )}
@@ -137,7 +157,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "subscriptions" ? "active" : ""}`}
             onClick={() => setCurrentModule("subscriptions")}
           >
-            <span className="nav-icon">📋</span>
+            <span className="nav-icon"><FileText size={18} /></span>
             <span>{isCustomer ? "My Subscriptions" : "Subscriptions"}</span>
           </button>
 
@@ -147,7 +167,7 @@ export function DashboardLayout() {
                 className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
                 onClick={() => setCurrentModule("catalog")}
               >
-                <span className="nav-icon">📦</span>
+                <span className="nav-icon"><Package size={18} /></span>
                 <span>Products & Plans</span>
               </button>
 
@@ -155,7 +175,7 @@ export function DashboardLayout() {
                 className={`nav-item ${currentModule === "discounts" ? "active" : ""}`}
                 onClick={() => setCurrentModule("discounts")}
               >
-                <span className="nav-icon">🏷️</span>
+                <span className="nav-icon"><Tag size={18} /></span>
                 <span>Discounts</span>
               </button>
             </>
@@ -165,7 +185,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "invoices" ? "active" : ""}`}
             onClick={() => setCurrentModule("invoices")}
           >
-            <span className="nav-icon">🧾</span>
+            <span className="nav-icon"><Receipt size={18} /></span>
             <span>{isCustomer ? "My Invoices" : "Invoices"}</span>
           </button>
 
@@ -173,7 +193,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "payments" ? "active" : ""}`}
             onClick={() => setCurrentModule("payments")}
           >
-            <span className="nav-icon">💳</span>
+            <span className="nav-icon"><CreditCard size={18} /></span>
             <span>{isCustomer ? "My Payments" : "Payments"}</span>
           </button>
 
@@ -182,7 +202,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "billing-hook" ? "active" : ""}`}
               onClick={() => setCurrentModule("billing-hook")}
             >
-              <span className="nav-icon">⚡</span>
+              <span className="nav-icon"><Zap size={18} /></span>
               <span>Billing Simulator (M4)</span>
             </button>
           )}
@@ -192,7 +212,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "reports" ? "active" : ""}`}
               onClick={() => setCurrentModule("reports")}
             >
-              <span className="nav-icon">📈</span>
+              <span className="nav-icon"><TrendingUp size={18} /></span>
               <span>Reports</span>
             </button>
           )}
@@ -201,7 +221,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "settings" ? "active" : ""}`}
             onClick={() => setCurrentModule("settings")}
           >
-            <span className="nav-icon">⚙️</span>
+            <span className="nav-icon"><Settings size={18} /></span>
             <span>Settings</span>
           </button>
 
@@ -210,7 +230,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "admin" ? "active" : ""}`}
               onClick={() => setCurrentModule("admin")}
             >
-              <span className="nav-icon">🛡️</span>
+              <span className="nav-icon"><Shield size={18} /></span>
               <span>Django Admin</span>
             </button>
           )}
@@ -230,7 +250,7 @@ export function DashboardLayout() {
         {/* Top Navigation Bar */}
         <header className="topbar">
           <div className="topbar-search">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon"><Search size={16} /></span>
             <input
               type="text"
               placeholder="Search contracts, quotations, customer email..."
@@ -259,10 +279,17 @@ export function DashboardLayout() {
             {user && (
               <button
                 className="btn-secondary"
-                style={{ padding: "6px 12px", fontSize: "var(--font-size-small)" }}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: "var(--font-size-small)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
                 onClick={handleLogout}
               >
-                Logout
+                <LogOut size={14} />
+                <span>Logout</span>
               </button>
             )}
           </div>
@@ -296,7 +323,10 @@ export function DashboardLayout() {
 
           {currentModule === "catalog" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <CatalogView />
+              <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                <ProductsAdmin />
+                <PlansAdmin />
+              </div>
             </ProtectedRoute>
           )}
 
@@ -314,7 +344,7 @@ export function DashboardLayout() {
 
           {currentModule === "discounts" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <DiscountsView />
+              <DiscountsAdmin />
             </ProtectedRoute>
           )}
 

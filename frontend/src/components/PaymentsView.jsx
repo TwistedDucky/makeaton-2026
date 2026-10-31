@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getPayments, recordPayment } from "../api/payments";
+import { Plus, X } from "lucide-react";
 
 // Fallback mock payments conforming strictly to Member 4's contract
 const MOCK_PAYMENTS = [
@@ -198,8 +199,13 @@ export default function PaymentsView() {
         </div>
         {/* Staff action: Record payment */}
         {isStaff && (
-          <button className="btn-primary" onClick={() => setShowRecordModal(true)}>
-            + Record payment
+          <button
+            className="btn-primary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={() => setShowRecordModal(true)}
+          >
+            <Plus size={16} />
+            <span>Record payment</span>
           </button>
         )}
       </div>
@@ -224,10 +230,17 @@ export default function PaymentsView() {
         >
           <span>{actionNotice}</span>
           <button
-            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "inherit",
+              display: "flex",
+              alignItems: "center",
+            }}
             onClick={() => setActionNotice(null)}
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
       )}
@@ -388,8 +401,12 @@ export default function PaymentsView() {
                   Direct entry for payments received via card, bank wire, UPI, or cash.
                 </p>
               </div>
-              <button className="btn-secondary" onClick={() => setShowRecordModal(false)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setShowRecordModal(false)}
+              >
+                <X size={16} />
               </button>
             </div>
 

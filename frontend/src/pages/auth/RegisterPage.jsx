@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, UserPlus, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { register } from "../../api/auth";
 import { useAuth } from "../../context/AuthContext";
+import "./auth.css";
 
 // Password rule definitions — checked live as user types
 const PASSWORD_RULES = [
@@ -14,12 +15,14 @@ const PASSWORD_RULES = [
 
 function PasswordRule({ met, label }) {
     return (
-        <li className="flex items-center gap-1.5 text-xs">
+        <li style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-small)' }}>
             {met
-                ? <CheckCircle2 size={13} className="text-green-600 shrink-0" />
-                : <XCircle      size={13} className="text-[#6B7280] shrink-0" />
+                ? <CheckCircle2 size={13} style={{ color: 'var(--color-status-active-text)', flexShrink: 0 }} />
+                : <XCircle      size={13} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
             }
-            <span className={met ? "text-green-700" : "text-[#6B7280]"}>{label}</span>
+            <span style={{ color: met ? 'var(--color-status-active-text)' : 'var(--color-text-secondary)' }}>
+                {label}
+            </span>
         </li>
     );
 }
@@ -95,41 +98,33 @@ export default function RegisterPage() {
     const canSubmit = form.email && form.password && passwordValid && !loading;
 
     return (
-        <div className="min-h-screen bg-[#EEEBDA] flex items-center justify-center px-4 py-10">
-            <div className="w-full max-w-md">
+        <div className="auth-page">
+            <div className="auth-container">
 
                 {/* Brand */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#282B4A] mb-4">
-                        <span className="text-white font-bold text-lg">B</span>
-                    </div>
-                    <h1 className="text-[28px] font-bold text-[#282B4A] leading-tight">
-                        Create your account
-                    </h1>
-                    <p className="text-sm text-[#6B7280] mt-1">
-                        Join Brightloop — it's free to get started
-                    </p>
+                <div className="auth-brand">
+                    <div className="brand-logo-mark">B</div>
+                    <h1>Create your account</h1>
+                    <p>Join Brightloop — it's free to get started</p>
                 </div>
 
                 {/* Card */}
-                <div className="bg-white rounded-xl border border-[#DCD9C8] p-8 shadow-sm">
+                <div className="auth-card">
 
                     {/* Error banner */}
                     {error && (
-                        <div className="flex items-start gap-2 bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] rounded-lg px-4 py-3 mb-6 text-sm">
-                            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                        <div className="error-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: 'var(--space-4)' }}>
+                            <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                             <span>{error}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                    <form onSubmit={handleSubmit} noValidate className="auth-form">
 
                         {/* Name row */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label htmlFor="first_name" className="block text-sm font-medium text-[#282B4A] mb-1.5">
-                                    First name
-                                </label>
+                        <div className="form-row">
+                            <div className="form-field">
+                                <label htmlFor="first_name">First name</label>
                                 <input
                                     id="first_name"
                                     name="first_name"
@@ -138,18 +133,14 @@ export default function RegisterPage() {
                                     value={form.first_name}
                                     onChange={handleChange}
                                     placeholder="Alice"
-                                    className={`w-full h-10 px-3 text-sm bg-white rounded-lg text-[#282B4A] placeholder-[#6B7280]
-                                        border transition-colors focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                        ${fieldErrors.first_name ? "border-red-400" : "border-[#DCD9C8]"}`}
+                                    className={fieldErrors.first_name ? "input-error" : ""}
                                 />
                                 {fieldErrors.first_name && (
-                                    <p className="text-xs text-red-600 mt-1">{fieldErrors.first_name[0]}</p>
+                                    <p className="field-error">{fieldErrors.first_name[0]}</p>
                                 )}
                             </div>
-                            <div>
-                                <label htmlFor="last_name" className="block text-sm font-medium text-[#282B4A] mb-1.5">
-                                    Last name
-                                </label>
+                            <div className="form-field">
+                                <label htmlFor="last_name">Last name</label>
                                 <input
                                     id="last_name"
                                     name="last_name"
@@ -158,20 +149,18 @@ export default function RegisterPage() {
                                     value={form.last_name}
                                     onChange={handleChange}
                                     placeholder="Smith"
-                                    className={`w-full h-10 px-3 text-sm bg-white rounded-lg text-[#282B4A] placeholder-[#6B7280]
-                                        border transition-colors focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                        ${fieldErrors.last_name ? "border-red-400" : "border-[#DCD9C8]"}`}
+                                    className={fieldErrors.last_name ? "input-error" : ""}
                                 />
                                 {fieldErrors.last_name && (
-                                    <p className="text-xs text-red-600 mt-1">{fieldErrors.last_name[0]}</p>
+                                    <p className="field-error">{fieldErrors.last_name[0]}</p>
                                 )}
                             </div>
                         </div>
 
                         {/* Email */}
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-[#282B4A] mb-1.5">
-                                Email address <span className="text-red-500">*</span>
+                        <div className="form-field">
+                            <label htmlFor="email">
+                                Email address <span style={{ color: 'var(--color-status-overdue-text)' }}>*</span>
                             </label>
                             <input
                                 id="email"
@@ -182,20 +171,20 @@ export default function RegisterPage() {
                                 value={form.email}
                                 onChange={handleChange}
                                 placeholder="you@example.com"
-                                className={`w-full h-10 px-3 text-sm bg-white rounded-lg text-[#282B4A] placeholder-[#6B7280]
-                                    border transition-colors focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                    ${fieldErrors.email ? "border-red-400" : "border-[#DCD9C8]"}`}
+                                className={fieldErrors.email ? "input-error" : ""}
                             />
                             {fieldErrors.email && (
-                                <p className="text-xs text-red-600 mt-1">{fieldErrors.email[0]}</p>
+                                <p className="field-error">{fieldErrors.email[0]}</p>
                             )}
                         </div>
 
                         {/* Phone (optional) */}
-                        <div>
-                            <label htmlFor="phone_number" className="block text-sm font-medium text-[#282B4A] mb-1.5">
+                        <div className="form-field">
+                            <label htmlFor="phone_number">
                                 Phone number
-                                <span className="text-[#6B7280] font-normal ml-1">(optional)</span>
+                                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '4px' }}>
+                                    (optional)
+                                </span>
                             </label>
                             <input
                                 id="phone_number"
@@ -205,19 +194,15 @@ export default function RegisterPage() {
                                 value={form.phone_number}
                                 onChange={handleChange}
                                 placeholder="+1 555 000 0000"
-                                className="w-full h-10 px-3 text-sm bg-white border border-[#DCD9C8] rounded-lg
-                                           text-[#282B4A] placeholder-[#6B7280]
-                                           focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                           transition-colors"
                             />
                         </div>
 
                         {/* Password */}
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-[#282B4A] mb-1.5">
-                                Password <span className="text-red-500">*</span>
+                        <div className="form-field">
+                            <label htmlFor="password">
+                                Password <span style={{ color: 'var(--color-status-overdue-text)' }}>*</span>
                             </label>
-                            <div className="relative">
+                            <div className="password-input-wrapper">
                                 <input
                                     id="password"
                                     name="password"
@@ -228,26 +213,24 @@ export default function RegisterPage() {
                                     onChange={handleChange}
                                     onFocus={() => setPwdFocused(true)}
                                     placeholder="Create a strong password"
-                                    className={`w-full h-10 px-3 pr-10 text-sm bg-white rounded-lg text-[#282B4A] placeholder-[#6B7280]
-                                        border transition-colors focus:outline-none focus:ring-2 focus:ring-[#282B4A]/20 focus:border-[#282B4A]
-                                        ${fieldErrors.password ? "border-red-400" : "border-[#DCD9C8]"}`}
+                                    className={fieldErrors.password ? "input-error" : ""}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPwd((v) => !v)}
                                     aria-label={showPwd ? "Hide password" : "Show password"}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#282B4A] transition-colors"
+                                    className="password-toggle"
                                 >
                                     {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                             </div>
                             {fieldErrors.password && (
-                                <p className="text-xs text-red-600 mt-1">{fieldErrors.password[0]}</p>
+                                <p className="field-error">{fieldErrors.password[0]}</p>
                             )}
 
                             {/* Live password rules — shown once field is focused */}
                             {(pwdFocused || form.password) && (
-                                <ul className="mt-2.5 space-y-1 bg-[#F6F5EE] border border-[#DCD9C8] rounded-lg px-3 py-2.5">
+                                <ul className="password-rules">
                                     {passwordRules.map((r) => (
                                         <PasswordRule key={r.id} met={r.met} label={r.label} />
                                     ))}
@@ -259,12 +242,10 @@ export default function RegisterPage() {
                         <button
                             type="submit"
                             disabled={!canSubmit}
-                            className="w-full h-10 flex items-center justify-center gap-2 mt-2
-                                       bg-[#282B4A] hover:bg-[#1e2138] disabled:opacity-50 disabled:cursor-not-allowed
-                                       text-white text-sm font-medium rounded-lg transition-colors"
+                            className="btn-primary btn-auth"
                         >
                             {loading ? (
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span className="spinner" />
                             ) : (
                                 <>
                                     <UserPlus size={15} />
@@ -275,15 +256,13 @@ export default function RegisterPage() {
                     </form>
 
                     {/* Divider */}
-                    <div className="flex items-center gap-3 my-5">
-                        <div className="flex-1 h-px bg-[#DCD9C8]" />
-                        <span className="text-xs text-[#6B7280]">or</span>
-                        <div className="flex-1 h-px bg-[#DCD9C8]" />
+                    <div className="auth-divider">
+                        <span>or</span>
                     </div>
 
-                    <p className="text-center text-sm text-[#6B7280]">
+                    <p className="auth-footer-text">
                         Already have an account?{" "}
-                        <Link to="/login" className="text-[#282B4A] font-medium hover:underline">
+                        <Link to="/login" className="auth-link">
                             Sign in
                         </Link>
                     </p>

@@ -12,6 +12,7 @@ import {
 import { getProducts, getPlans } from "../api/catalog";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { RotateCw, X, Plus } from "lucide-react";
 
 export default function QuotationsView({ onConvertedToSubscription }) {
   const { user } = useAuth();
@@ -231,12 +232,22 @@ export default function QuotationsView({ onConvertedToSubscription }) {
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
           {!isCustomer && (
-            <button className="btn-primary" onClick={() => setShowCustomModal(true)}>
-              + New Custom Quote
+            <button
+              className="btn-primary"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              onClick={() => setShowCustomModal(true)}
+            >
+              <Plus size={16} />
+              <span>New custom quote</span>
             </button>
           )}
-          <button className="btn-secondary" onClick={loadData}>
-            🔄 Refresh
+          <button
+            className="btn-secondary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={loadData}
+          >
+            <RotateCw size={14} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
@@ -436,8 +447,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                 <h3>Generate Quotation</h3>
                 <p className="card-subtitle">Template: {selectedTemplate.name}</p>
               </div>
-              <button className="btn-secondary" onClick={() => setSelectedTemplate(null)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setSelectedTemplate(null)}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -515,8 +530,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                 <h3>Create Custom Quotation</h3>
                 <p className="card-subtitle">Build a bespoke proposal with custom lines and terms</p>
               </div>
-              <button className="btn-secondary" onClick={() => setShowCustomModal(false)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setShowCustomModal(false)}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -712,9 +731,17 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                               <button
                                 type="button"
                                 onClick={() => removeCustomLine(idx)}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "#DC2626" }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "#DC2626",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
                               >
-                                ✕
+                                <X size={14} />
                               </button>
                             )}
                           </td>
@@ -778,8 +805,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                   Reference: <strong>{previewQuote.quotation_number}</strong>
                 </p>
               </div>
-              <button className="btn-secondary" onClick={() => setPreviewQuote(null)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setPreviewQuote(null)}
+              >
+                <X size={16} />
               </button>
             </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getSubscriptions } from "../api/subscriptions";
 import { useAuth } from "../context/AuthContext";
 import SubscriptionPipeline from "./SubscriptionPipeline";
+import { Lock } from "lucide-react";
 
 export default function SubscriptionsView() {
   const { user } = useAuth();
@@ -89,8 +90,11 @@ export default function SubscriptionsView() {
             <div className="empty-state">
               {!user ? (
                 <>
-                  <p>🔒 You are currently viewing as guest.</p>
-                  <small>Use the <strong>1-Click Test Login</strong> buttons in the header above (e.g. <strong>Sales Rep 👤</strong> or <strong>Customer 🏢</strong>) to view and manage live contracts!</small>
+                  <p style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <Lock size={16} />
+                    <span>You are currently viewing as guest.</span>
+                  </p>
+                  <small>Use the Role dropdown in the top navigation bar to switch between Staff and Customer accounts to manage live contracts.</small>
                 </>
               ) : (
                 <>

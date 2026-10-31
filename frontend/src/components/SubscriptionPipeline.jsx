@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { transitionSubscription, renewSubscription } from "../api/subscriptions";
+import { Check, Lock } from "lucide-react";
 
 const PIPELINE_STAGES = [
   { key: "DRAFT", label: "Draft", desc: "Initial contract setup" },
@@ -70,7 +71,7 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
               className={`stepper-step ${isCurrent ? "current" : ""} ${isPassed ? "completed" : ""} ${isClosed && isCurrent ? "step-closed" : ""}`}
             >
               <div className="step-circle">
-                {isPassed ? "✓" : idx + 1}
+                {isPassed ? <Check size={13} strokeWidth={2.8} /> : idx + 1}
               </div>
               <div className="step-label">
                 <strong>{stage.label}</strong>
@@ -171,7 +172,10 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
 
           {subscription.status === "CLOSED" && (
             <div className="closed-badge-notice">
-              🔒 Contract is permanently Closed. No further state transitions allowed.
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Lock size={14} />
+                <span>Contract is permanently Closed. No further state transitions allowed.</span>
+              </span>
               {subscription.cancellation_reason && (
                 <div className="reason-text">Reason: {subscription.cancellation_reason}</div>
               )}
