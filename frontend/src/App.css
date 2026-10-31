@@ -1021,6 +1021,62 @@ button:disabled {
   margin-top: 1rem;
 }
 
+/* Templates Grid & Cards */
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.template-card {
+  background-color: var(--soft-vanilla);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tmpl-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tmpl-title strong {
+  font-size: 1rem;
+  color: var(--midnight-indigo);
+}
+
+.tmpl-plan {
+  font-size: 0.75rem;
+  background-color: var(--white);
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  color: var(--midnight-indigo);
+}
+
+.tmpl-desc {
+  font-size: 0.85rem;
+  color: var(--secondary-text);
+  margin: 0;
+  flex: 1;
+}
+
+.tmpl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--secondary-text);
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
 /* KPI Metric Cards Grid */
 .kpi-grid {
   display: grid;

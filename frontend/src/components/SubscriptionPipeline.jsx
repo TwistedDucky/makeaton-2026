@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { transitionSubscription } from "../api/subscriptions";
+import { transitionSubscription, renewSubscription } from "../api/subscriptions";
 
 const PIPELINE_STAGES = [
   { key: "DRAFT", label: "Draft", desc: "Initial contract setup" },
@@ -16,6 +16,19 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
   const [showCloseModal, setShowCloseModal] = useState(false);
 
   const currentIdx = PIPELINE_STAGES.findIndex((s) => s.key === subscription.status);
+
+  async function handleRenew() {
+    setLoading(true);
+    setError("");
+    try {
+      const renewed = await renewSubscription(subscription.id);
+      if (onUpdated) onUpdated(renewed);
+    } catch (err) {
+      setError(err?.error || err?.message || "Failed to renew subscription");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleTransition(targetStatus, reason = "") {
     setLoading(true);
@@ -138,13 +151,22 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
           )}
 
           {subscription.status === "ACTIVE" && (
-            <button
-              className="btn-danger"
-              disabled={loading}
-              onClick={() => setShowCloseModal(true)}
-            >
-              Terminate / Close Subscription
-            </button>
+            <div style={{ display: "inline-flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button
+                className="btn-primary"
+                disabled={loading}
+                onClick={handleRenew}
+              >
+                🔄 Renew Contract (+1 Cycle)
+              </button>
+              <button
+                className="btn-danger"
+                disabled={loading}
+                onClick={() => setShowCloseModal(true)}
+              >
+                Terminate / Close Subscription
+              </button>
+            </div>
           )}
 
           {subscription.status === "CLOSED" && (

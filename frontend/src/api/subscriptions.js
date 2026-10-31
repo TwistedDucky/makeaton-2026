@@ -40,3 +40,10 @@ export async function advanceBilling(id) {
     method: "POST",
   });
 }
+
+export async function renewSubscription(id) {
+  return apiRequest(`/subscriptions/${id}/renew/`, {
+    method: "POST",
+  });
+}
+

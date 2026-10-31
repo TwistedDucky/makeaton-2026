@@ -256,3 +256,25 @@ def advance_next_billing_date(subscription_id: int) -> dict:
         "next_billing_date": subscription.next_billing_date,
         "status": subscription.status,
     }
+
+
+@transaction.atomic
+def renew_subscription(subscription_id: int) -> Subscription:
+    """
+    Extends the subscription contract period by one billing period if renewable.
+    Enforces plan.renewable flag from catalog Plan settings.
+    """
+    subscription = Subscription.objects.select_related("plan").get(pk=subscription_id)
+    if not subscription.plan.renewable:
+        raise ValidationError("This subscription plan is not configured for automatic renewal.")
+    if subscription.status != Subscription.Status.ACTIVE:
+        raise ValidationError("Only active subscriptions can be renewed.")
+
+    current_expiry = subscription.expiry_date or subscription.current_period_end or timezone.now().date()
+    new_period_start = current_expiry + timedelta(days=1)
+    new_expiry = calculate_period_end(new_period_start, subscription.plan.billing_period)
+
+    subscription.expiry_date = new_expiry
+    subscription.save(update_fields=["expiry_date", "updated_at"])
+    return subscription
+
