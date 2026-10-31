@@ -1,26 +1,15 @@
-import { useEffect, useState } from "react";
-import { initializeCsrf } from "./api/auth";
+import { AuthProvider } from "./context/AuthContext";
+import Layout from "./components/layout/Layout";
+import DashboardPage from "./pages/dashboard/DashboardPage";
 
 function App() {
-  const [message, setMessage] = useState("Connecting to Django...");
-
-  useEffect(() => {
-    initializeCsrf()
-      .then((data) => {
-        if (data.success) {
-          setMessage("Connected to Django backend! (CSRF cookie initialized)");
-        } else {
-          setMessage("Failed to verify backend connection");
-        }
-      })
-      .catch(() => setMessage("Could not connect to Django"));
-  }, []);
-
   return (
-    <main>
-      <h1>Hackathon Starter</h1>
-      <p>{message}</p>
-    </main>
+    <AuthProvider>
+      <Layout>
+        {/* TODO: replace with a router (e.g. react-router-dom) */}
+        <DashboardPage />
+      </Layout>
+    </AuthProvider>
   );
 }
 
