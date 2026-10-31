@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getSubscriptions } from "../api/subscriptions";
 import { getInvoices } from "../api/billing";
 import { useAuth } from "../context/AuthContext";
+import { Plus } from "lucide-react";
 
 export default function DashboardView({ onNavigate }) {
   const { user } = useAuth();
@@ -74,7 +75,8 @@ export default function DashboardView({ onNavigate }) {
         {!isCustomer && (
           <div className="header-actions">
             <button className="btn-primary" onClick={() => onNavigate("quotations")}>
-              + New quotation
+              <Plus size={16} />
+              <span>New quotation</span>
             </button>
             <button className="btn-secondary" onClick={() => onNavigate("subscriptions")}>
               View pipeline
