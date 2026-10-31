@@ -283,13 +283,6 @@ def generate_invoices(
                 errored_subs.add(sub_id)
                 continue
 
-            # Check if capped
-            if periods_count_by_sub[sub_id] >= max_periods_per_subscription:
-                if sub_id not in capped_subs:
-                    capped_subs.add(sub_id)
-                    capped.append(sub_id)
-                continue
-
             # Subscription with no lines
             if not lines:
                 err_msg = "no lines"
