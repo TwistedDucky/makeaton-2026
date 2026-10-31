@@ -139,11 +139,13 @@
 }
 
 .nav-icon {
-  font-size: 16px;
   width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  color: currentColor;
 }
 
 .sidebar-footer {
@@ -222,8 +224,11 @@
 }
 
 .search-icon {
-  font-size: 14px;
   color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .topbar-right {
