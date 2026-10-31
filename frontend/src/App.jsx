@@ -4,16 +4,19 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import DashboardView from "./components/DashboardView";
 import CustomersView from "./components/CustomersView";
-import CatalogView from "./components/CatalogView";
 import QuotationsView from "./components/QuotationsView";
 import SubscriptionsView from "./components/SubscriptionsView";
 import InvoicesView from "./components/InvoicesView";
 import PaymentsView from "./components/PaymentsView";
-import DiscountsView from "./components/DiscountsView";
 import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+
+import "./features/catalog/catalog.css";
+import ProductsAdmin from "./features/catalog/ProductsAdmin";
+import PlansAdmin from "./features/catalog/PlansAdmin";
+import DiscountsAdmin from "./features/catalog/DiscountsAdmin";
 
 // Auth pages from Member 1
 import LoginPage from "./pages/auth/LoginPage";
@@ -320,7 +323,10 @@ export function DashboardLayout() {
 
           {currentModule === "catalog" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <CatalogView />
+              <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                <ProductsAdmin />
+                <PlansAdmin />
+              </div>
             </ProtectedRoute>
           )}
 
@@ -338,7 +344,7 @@ export function DashboardLayout() {
 
           {currentModule === "discounts" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <DiscountsView />
+              <DiscountsAdmin />
             </ProtectedRoute>
           )}
 
