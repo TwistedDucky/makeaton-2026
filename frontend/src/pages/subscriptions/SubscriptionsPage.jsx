@@ -1,9 +1,6 @@
-export default function SubscriptionsPage() {
-  return (
-    <div>
-      <h1>Subscriptions</h1>
-      <p>Subscription plans and management go here.</p>
-    </div>
-  );
-}
+import React from "react";
+import SubscriptionsView from "../../components/SubscriptionsView";
 
+export default function SubscriptionsPage() {
+  return <SubscriptionsView />;
+}

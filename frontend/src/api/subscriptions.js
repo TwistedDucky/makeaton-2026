@@ -10,10 +10,33 @@ export async function getSubscription(id) {
 }
 
 export async function createSubscription(data) {
-  return apiRequest("/subscriptions/", { method: "POST", body: JSON.stringify(data) });
+  return apiRequest("/subscriptions/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
-export async function cancelSubscription(id) {
-  return apiRequest(`/subscriptions/${id}/cancel/`, { method: "POST" });
+export async function transitionSubscription(id, targetStatus, reason = "") {
+  return apiRequest(`/subscriptions/${id}/transition/`, {
+    method: "POST",
+    body: JSON.stringify({
+      target_status: targetStatus,
+      reason,
+    }),
+  });
 }
 
+export async function cancelSubscription(id, reason = "Cancelled") {
+  return transitionSubscription(id, "CLOSED", reason);
+}
+
+export async function getDueSubscriptions(targetDate) {
+  const query = targetDate ? `?target_date=${targetDate}` : "";
+  return apiRequest(`/subscriptions/due-for-billing/${query}`);
+}
+
+export async function advanceBilling(id) {
+  return apiRequest(`/subscriptions/${id}/advance-billing/`, {
+    method: "POST",
+  });
+}
