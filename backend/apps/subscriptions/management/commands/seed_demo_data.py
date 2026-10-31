@@ -20,6 +20,14 @@ from apps.subscriptions.services import transition_subscription
 class Command(BaseCommand):
     help = "Seeds comprehensive demo data for testing the Subscriptions, Quotations, and Billing platform."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--scale",
+            type=int,
+            default=0,
+            help="Number of subscriptions to seed for performance/page-load testing (e.g. 2500)",
+        )
+
     @transaction.atomic
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE("Seeding demo data..."))
@@ -331,7 +339,84 @@ class Command(BaseCommand):
         )
         sub_closed.recalculate_totals()
 
-        self.stdout.write(self.style.SUCCESS("✓ Demo data successfully seeded!"))
+        self.stdout.write(self.style.SUCCESS("✓ Core demo data successfully seeded!"))
+
+        scale_count = options.get("scale") or 0
+        if scale_count > 0:
+            self.stdout.write(self.style.NOTICE(f"Generating {scale_count} scale subscriptions for 2-second page-load benchmark..."))
+            import time
+            start_time = time.time()
+
+            existing_scale = Subscription.objects.filter(subscription_number__startswith="SUB-SCALE-").count()
+            start_idx = existing_scale + 1
+            end_idx = start_idx + scale_count
+
+            subs_to_create = []
+            today = timezone.now().date()
+            plans_pool = [plan_monthly, plan_annual]
+            customers_pool = [customer1, customer2]
+            statuses_pool = [
+                Subscription.Status.ACTIVE,
+                Subscription.Status.ACTIVE,
+                Subscription.Status.ACTIVE,
+                Subscription.Status.CONFIRMED,
+                Subscription.Status.QUOTATION,
+                Subscription.Status.CLOSED,
+            ]
+
+            for i in range(start_idx, end_idx):
+                plan = plans_pool[i % len(plans_pool)]
+                customer = customers_pool[i % len(customers_pool)]
+                status = statuses_pool[i % len(statuses_pool)]
+                start_d = today - timedelta(days=(i % 60))
+                expiry_d = start_d + timedelta(days=365) if plan == plan_annual else None
+                next_bill = today + timedelta(days=((i % 30) - 10)) if status == Subscription.Status.ACTIVE else None
+
+                sub = Subscription(
+                    subscription_number=f"SUB-SCALE-{i:06d}",
+                    customer=customer,
+                    plan=plan,
+                    status=status,
+                    start_date=start_d,
+                    expiry_date=expiry_d,
+                    payment_terms=Subscription.PaymentTerms.NET_30,
+                    current_period_start=start_d,
+                    current_period_end=start_d + timedelta(days=30),
+                    next_billing_date=next_bill,
+                    subtotal=Decimal("2000.00"),
+                    tax_amount=Decimal("360.00"),
+                    total_amount=Decimal("2360.00"),
+                    notes=f"Scale benchmark subscription #{i}",
+                )
+                subs_to_create.append(sub)
+
+            created_subs = Subscription.objects.bulk_create(subs_to_create, batch_size=1000)
+
+            lines_to_create = []
+            for sub in created_subs:
+                lines_to_create.append(
+                    SubscriptionLine(
+                        subscription=sub,
+                        product=p_crm,
+                        variant=v_cloud,
+                        quantity=1,
+                        unit_price=Decimal("2000.00"),
+                        taxes=Decimal("360.00"),
+                        amount=Decimal("2360.00"),
+                    )
+                )
+
+            SubscriptionLine.objects.bulk_create(lines_to_create, batch_size=1000)
+            elapsed = time.time() - start_time
+            total_subs = Subscription.objects.count()
+            total_lines = SubscriptionLine.objects.count()
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"✓ Successfully seeded {scale_count} scale subscriptions ({len(lines_to_create)} lines) in {elapsed:.2f}s! Total in DB: {total_subs} subscriptions, {total_lines} lines."
+                )
+            )
+
         self.stdout.write(self.style.SUCCESS("""
 Credentials for testing:
 - Admin:    admin@example.com / Admin123!

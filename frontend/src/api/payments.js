@@ -13,3 +13,4 @@ export async function createPayment(data) {
   return apiRequest("/payments/", { method: "POST", body: JSON.stringify(data) });
 }
 
+export const recordPayment = createPayment;

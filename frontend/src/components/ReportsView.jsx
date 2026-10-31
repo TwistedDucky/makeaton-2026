@@ -1,19 +1,37 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { getReports } from "../api/reports";
 
 export default function ReportsView() {
-  const metrics = [
+  const [metrics, setMetrics] = useState([
     { label: "Monthly Recurring Revenue (MRR)", value: "₹6,683.86", change: "+12.4% vs last month" },
     { label: "Annual Run-Rate (ARR)", value: "₹80,206.32", change: "+18.2% YoY" },
     { label: "Average Revenue Per User (ARPU)", value: "₹1,670.96", change: "Healthy SaaS benchmark" },
     { label: "Net Revenue Retention (NRR)", value: "114%", change: "Low contract churn (< 2%)" },
-  ];
+  ]);
 
-  const stageBreakdown = [
-    { stage: "Active", count: 4, percentage: 50, color: "var(--status-active-text)", bg: "var(--status-active-bg)" },
-    { stage: "Quotation / Under Review", count: 2, percentage: 25, color: "var(--status-pending-text)", bg: "var(--status-pending-bg)" },
-    { stage: "Confirmed", count: 1, percentage: 12.5, color: "var(--status-confirmed-text)", bg: "var(--status-confirmed-bg)" },
-    { stage: "Draft", count: 1, percentage: 12.5, color: "var(--secondary-text)", bg: "var(--muted-beige)" },
-  ];
+  const [stageBreakdown, setStageBreakdown] = useState([
+    { stage: "Active", count: 4, percentage: 50, color: "var(--color-status-active-text)", bg: "var(--color-status-active-bg)" },
+    { stage: "Quotation / Under Review", count: 2, percentage: 25, color: "var(--color-status-pending-text)", bg: "var(--color-status-pending-bg)" },
+    { stage: "Confirmed", count: 1, percentage: 12.5, color: "var(--color-status-confirmed-text)", bg: "var(--color-status-confirmed-bg)" },
+    { stage: "Draft", count: 1, percentage: 12.5, color: "var(--color-text-secondary)", bg: "var(--color-muted)" },
+  ]);
+
+  useEffect(() => {
+    async function loadReports() {
+      try {
+        const res = await getReports();
+        if (res?.data?.metrics) {
+          setMetrics(res.data.metrics);
+        }
+        if (res?.data?.stageBreakdown) {
+          setStageBreakdown(res.data.stageBreakdown);
+        }
+      } catch (err) {
+        // Fallback to high-fidelity mock metrics
+      }
+    }
+    loadReports();
+  }, []);
 
   return (
     <div className="view-container">
@@ -59,8 +77,8 @@ export default function ReportsView() {
                 style={{
                   width: "100%",
                   height: "12px",
-                  backgroundColor: "var(--soft-vanilla)",
-                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--color-muted)",
+                  border: "1px solid var(--color-border)",
                   borderRadius: "6px",
                   overflow: "hidden",
                 }}
@@ -69,7 +87,7 @@ export default function ReportsView() {
                   style={{
                     width: `${s.percentage}%`,
                     height: "100%",
-                    backgroundColor: "var(--midnight-indigo)",
+                    backgroundColor: "var(--color-midnight-indigo)",
                   }}
                 />
               </div>

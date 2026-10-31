@@ -4,21 +4,43 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import DashboardView from "./components/DashboardView";
 import CustomersView from "./components/CustomersView";
-import CatalogView from "./components/CatalogView";
 import QuotationsView from "./components/QuotationsView";
 import SubscriptionsView from "./components/SubscriptionsView";
 import InvoicesView from "./components/InvoicesView";
 import PaymentsView from "./components/PaymentsView";
-import DiscountsView from "./components/DiscountsView";
 import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
+import "./features/catalog/catalog.css";
+import ProductsAdmin from "./features/catalog/ProductsAdmin";
+import PlansAdmin from "./features/catalog/PlansAdmin";
+import DiscountsAdmin from "./features/catalog/DiscountsAdmin";
+
 // Auth pages from Member 1
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
+
+import {
+  LayoutDashboard,
+  Users,
+  Briefcase,
+  FileText,
+  Package,
+  Tag,
+  Receipt,
+  CreditCard,
+  Zap,
+  TrendingUp,
+  Settings,
+  Shield,
+  Search,
+  LogOut,
+  Bell,
+  ChevronDown,
+} from "lucide-react";
 
 import "./App.css";
 
@@ -27,6 +49,7 @@ export function DashboardLayout() {
   const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
   const [globalSearch, setGlobalSearch] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   async function handleDemoLogin(email, password) {
     try {
@@ -78,30 +101,51 @@ export function DashboardLayout() {
   const isCustomer = role === "CUSTOMER";
   const isAdmin = role === "ADMIN";
 
+  const getDisplayName = () => {
+    if (userObj?.first_name && userObj?.last_name) {
+      if (userObj.first_name === "Admin" && userObj.last_name === "User") {
+        return "John Doe";
+      }
+      return `${userObj.first_name} ${userObj.last_name}`;
+    }
+    if (userObj?.email) {
+      if (userObj.email.startsWith("admin")) return "John Doe";
+      if (userObj.email.startsWith("sales")) return "Sarah Sales";
+      if (userObj.email.startsWith("acme")) return "Acme Corp";
+      const namePart = userObj.email.split("@")[0];
+      return namePart
+        .replace(/[._]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return "John Doe";
+  };
+
+  const getRoleLabel = () => {
+    if (role === "ADMIN") return "Admin";
+    if (role === "STAFF") return "Staff";
+    if (role === "CUSTOMER") return "Customer";
+    return role ? role.charAt(0).toUpperCase() + role.slice(1).toLowerCase() : "Admin";
+  };
+
+  const getInitials = (name) => {
+    if (!name) return "JD";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const displayName = getDisplayName();
+  const displayRole = getRoleLabel();
+  const initials = getInitials(displayName);
+
   return (
     <div className="brightloop-app">
       {/* 1. Midnight Indigo Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo-mark">B</div>
-          <div className="brand-text">
-            <h2>Brightloop</h2>
-            <span>Subscription OS</span>
-          </div>
-        </div>
-
-        <div className="sidebar-user-pill">
-          <span className="user-avatar">
-            {userObj?.email ? userObj.email[0].toUpperCase() : "S"}
-          </span>
-          <div className="user-details">
-            <strong>
-              {userObj?.email ? userObj.email.split("@")[0] : "Sales Staff"}
-            </strong>
-            <span className={`role-badge role-${(role || "staff").toLowerCase()}`}>
-              {role}
-            </span>
-          </div>
+          <h2 className="brand-title">Brightloop</h2>
         </div>
 
         <nav className="sidebar-nav">
@@ -109,7 +153,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "dashboard" ? "active" : ""}`}
             onClick={() => setCurrentModule("dashboard")}
           >
-            <span className="nav-icon">📊</span>
+            <span className="nav-icon"><LayoutDashboard size={18} /></span>
             <span>Dashboard</span>
           </button>
 
@@ -118,7 +162,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "customers" ? "active" : ""}`}
               onClick={() => setCurrentModule("customers")}
             >
-              <span className="nav-icon">👥</span>
+              <span className="nav-icon"><Users size={18} /></span>
               <span>Customers</span>
             </button>
           )}
@@ -128,7 +172,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "quotations" ? "active" : ""}`}
               onClick={() => setCurrentModule("quotations")}
             >
-              <span className="nav-icon">💼</span>
+              <span className="nav-icon"><Briefcase size={18} /></span>
               <span>Quotations</span>
             </button>
           )}
@@ -137,7 +181,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "subscriptions" ? "active" : ""}`}
             onClick={() => setCurrentModule("subscriptions")}
           >
-            <span className="nav-icon">📋</span>
+            <span className="nav-icon"><FileText size={18} /></span>
             <span>{isCustomer ? "My Subscriptions" : "Subscriptions"}</span>
           </button>
 
@@ -147,7 +191,7 @@ export function DashboardLayout() {
                 className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
                 onClick={() => setCurrentModule("catalog")}
               >
-                <span className="nav-icon">📦</span>
+                <span className="nav-icon"><Package size={18} /></span>
                 <span>Products & Plans</span>
               </button>
 
@@ -155,7 +199,7 @@ export function DashboardLayout() {
                 className={`nav-item ${currentModule === "discounts" ? "active" : ""}`}
                 onClick={() => setCurrentModule("discounts")}
               >
-                <span className="nav-icon">🏷️</span>
+                <span className="nav-icon"><Tag size={18} /></span>
                 <span>Discounts</span>
               </button>
             </>
@@ -165,7 +209,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "invoices" ? "active" : ""}`}
             onClick={() => setCurrentModule("invoices")}
           >
-            <span className="nav-icon">🧾</span>
+            <span className="nav-icon"><Receipt size={18} /></span>
             <span>{isCustomer ? "My Invoices" : "Invoices"}</span>
           </button>
 
@@ -173,7 +217,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "payments" ? "active" : ""}`}
             onClick={() => setCurrentModule("payments")}
           >
-            <span className="nav-icon">💳</span>
+            <span className="nav-icon"><CreditCard size={18} /></span>
             <span>{isCustomer ? "My Payments" : "Payments"}</span>
           </button>
 
@@ -182,7 +226,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "billing-hook" ? "active" : ""}`}
               onClick={() => setCurrentModule("billing-hook")}
             >
-              <span className="nav-icon">⚡</span>
+              <span className="nav-icon"><Zap size={18} /></span>
               <span>Billing Simulator (M4)</span>
             </button>
           )}
@@ -192,7 +236,7 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "reports" ? "active" : ""}`}
               onClick={() => setCurrentModule("reports")}
             >
-              <span className="nav-icon">📈</span>
+              <span className="nav-icon"><TrendingUp size={18} /></span>
               <span>Reports</span>
             </button>
           )}
@@ -201,7 +245,7 @@ export function DashboardLayout() {
             className={`nav-item ${currentModule === "settings" ? "active" : ""}`}
             onClick={() => setCurrentModule("settings")}
           >
-            <span className="nav-icon">⚙️</span>
+            <span className="nav-icon"><Settings size={18} /></span>
             <span>Settings</span>
           </button>
 
@@ -210,18 +254,73 @@ export function DashboardLayout() {
               className={`nav-item ${currentModule === "admin" ? "active" : ""}`}
               onClick={() => setCurrentModule("admin")}
             >
-              <span className="nav-icon">🛡️</span>
+              <span className="nav-icon"><Shield size={18} /></span>
               <span>Django Admin</span>
             </button>
           )}
         </nav>
 
         <div className="sidebar-footer">
-          <div className="system-health">
-            <span className="health-dot"></span>
-            <span>Backend: {backendStatus}</span>
+          <div
+            className="sidebar-user-profile"
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+          >
+            <div className="user-avatar-circle">{initials}</div>
+            <div className="user-profile-info">
+              <span className="user-profile-name">{displayName}</span>
+              <span className="user-profile-role">{displayRole}</span>
+            </div>
+            <ChevronDown size={16} className={`user-profile-chevron ${userMenuOpen ? "open" : ""}`} />
           </div>
-          <small className="build-version">Brightloop v1.0 • Midnight & Vanilla</small>
+
+          {userMenuOpen && (
+            <div className="user-profile-dropdown">
+              <div className="dropdown-user-header">
+                <strong>{displayName}</strong>
+                <small>{userObj?.email || "admin@example.com"}</small>
+              </div>
+              <div className="dropdown-divider"></div>
+              <div className="dropdown-role-label">Switch Demo Role:</div>
+              <button
+                className={`dropdown-role-btn ${role === "ADMIN" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("admin@example.com", "Admin123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Admin (John Doe)
+              </button>
+              <button
+                className={`dropdown-role-btn ${role === "STAFF" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("sales@example.com", "Staff123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Staff (Sarah Sales)
+              </button>
+              <button
+                className={`dropdown-role-btn ${role === "CUSTOMER" ? "active" : ""}`}
+                onClick={() => {
+                  handleDemoLogin("acme@corp.com", "Customer123!");
+                  setUserMenuOpen(false);
+                }}
+              >
+                Customer (Acme Corp)
+              </button>
+              <div className="dropdown-divider"></div>
+              <button
+                className="dropdown-logout-btn"
+                onClick={() => {
+                  handleLogout();
+                  setUserMenuOpen(false);
+                }}
+              >
+                <LogOut size={14} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -230,7 +329,7 @@ export function DashboardLayout() {
         {/* Top Navigation Bar */}
         <header className="topbar">
           <div className="topbar-search">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon"><Search size={16} /></span>
             <input
               type="text"
               placeholder="Search contracts, quotations, customer email..."
@@ -240,6 +339,16 @@ export function DashboardLayout() {
           </div>
 
           <div className="topbar-right">
+            <button
+              className="topbar-bell-btn"
+              title="Notifications"
+              aria-label="Notifications"
+              type="button"
+            >
+              <Bell size={18} />
+              <span className="bell-badge-dot"></span>
+            </button>
+
             <div className="role-select-box">
               <span>Role:</span>
               <select
@@ -259,10 +368,17 @@ export function DashboardLayout() {
             {user && (
               <button
                 className="btn-secondary"
-                style={{ padding: "6px 12px", fontSize: "var(--font-size-small)" }}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: "var(--font-size-small)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
                 onClick={handleLogout}
               >
-                Logout
+                <LogOut size={14} />
+                <span>Logout</span>
               </button>
             )}
           </div>
@@ -296,7 +412,10 @@ export function DashboardLayout() {
 
           {currentModule === "catalog" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <CatalogView />
+              <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                <ProductsAdmin />
+                <PlansAdmin />
+              </div>
             </ProtectedRoute>
           )}
 
@@ -314,7 +433,7 @@ export function DashboardLayout() {
 
           {currentModule === "discounts" && (
             <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <DiscountsView />
+              <DiscountsAdmin />
             </ProtectedRoute>
           )}
 

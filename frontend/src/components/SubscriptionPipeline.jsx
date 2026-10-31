@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { transitionSubscription, renewSubscription } from "../api/subscriptions";
+import { Check, Lock } from "lucide-react";
 
 const PIPELINE_STAGES = [
   { key: "DRAFT", label: "Draft", desc: "Initial contract setup" },
@@ -70,7 +71,7 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
               className={`stepper-step ${isCurrent ? "current" : ""} ${isPassed ? "completed" : ""} ${isClosed && isCurrent ? "step-closed" : ""}`}
             >
               <div className="step-circle">
-                {isPassed ? "✓" : idx + 1}
+                {isPassed ? <Check size={13} strokeWidth={2.8} /> : idx + 1}
               </div>
               <div className="step-label">
                 <strong>{stage.label}</strong>
@@ -171,7 +172,10 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
 
           {subscription.status === "CLOSED" && (
             <div className="closed-badge-notice">
-              🔒 Contract is permanently Closed. No further state transitions allowed.
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Lock size={14} />
+                <span>Contract is permanently Closed. No further state transitions allowed.</span>
+              </span>
               {subscription.cancellation_reason && (
                 <div className="reason-text">Reason: {subscription.cancellation_reason}</div>
               )}
@@ -224,44 +228,46 @@ export default function SubscriptionPipeline({ subscription, onUpdated, onClose 
       {/* Product Lines Table */}
       <div className="lines-table-container">
         <h4>Contract Product Lines</h4>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Variant</th>
-              <th>Qty</th>
-              <th>Unit Price</th>
-              <th>Taxes</th>
-              <th>Total Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(subscription.lines || []).map((line) => (
-              <tr key={line.id}>
-                <td><strong>{line.product_name}</strong></td>
-                <td>{line.variant_display || "—"}</td>
-                <td>{line.quantity}</td>
-                <td>₹{Number(line.unit_price).toFixed(2)}</td>
-                <td>₹{Number(line.taxes).toFixed(2)}</td>
-                <td><strong>₹{Number(line.amount).toFixed(2)}</strong></td>
+        <div className="table-responsive">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Variant</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Taxes</th>
+                <th>Total Amount</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan="5" style={{ textAlign: "right" }}>Subtotal:</td>
-              <td>₹{Number(subscription.subtotal).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td colSpan="5" style={{ textAlign: "right" }}>Taxes:</td>
-              <td>₹{Number(subscription.tax_amount).toFixed(2)}</td>
-            </tr>
-            <tr className="grand-total-row">
-              <td colSpan="5" style={{ textAlign: "right" }}>Total Contract Value:</td>
-              <td>₹{Number(subscription.total_amount).toFixed(2)}</td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {(subscription.lines || []).map((line) => (
+                <tr key={line.id}>
+                  <td><strong>{line.product_name}</strong></td>
+                  <td>{line.variant_display || "—"}</td>
+                  <td>{line.quantity}</td>
+                  <td>₹{Number(line.unit_price).toFixed(2)}</td>
+                  <td>₹{Number(line.taxes).toFixed(2)}</td>
+                  <td><strong>₹{Number(line.amount).toFixed(2)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan="5" style={{ textAlign: "right" }}>Subtotal:</td>
+                <td>₹{Number(subscription.subtotal).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td colSpan="5" style={{ textAlign: "right" }}>Taxes:</td>
+                <td>₹{Number(subscription.tax_amount).toFixed(2)}</td>
+              </tr>
+              <tr className="grand-total-row">
+                <td colSpan="5" style={{ textAlign: "right" }}>Total Contract Value:</td>
+                <td>₹{Number(subscription.total_amount).toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {/* Close/Cancel Reason Modal */}

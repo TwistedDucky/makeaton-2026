@@ -9,8 +9,10 @@ import {
   declineQuotation,
   convertQuotationToSubscription,
 } from "../api/sales";
+import { getProducts, getPlans } from "../api/catalog";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { RotateCw, X, Plus } from "lucide-react";
 
 export default function QuotationsView({ onConvertedToSubscription }) {
   const { user } = useAuth();
@@ -30,8 +32,10 @@ export default function QuotationsView({ onConvertedToSubscription }) {
   const [customPlanId, setCustomPlanId] = useState("1");
   const [customTerms, setCustomTerms] = useState("NET_30");
   const [customValidityDays, setCustomValidityDays] = useState(30);
+  const [availablePlans, setAvailablePlans] = useState([]);
+  const [availableProducts, setAvailableProducts] = useState([]);
   const [customLines, setCustomLines] = useState([
-    { product_id: 1, quantity: 1, unit_price: "50.00", taxes: "9.00" },
+    { product_id: 1, quantity: 1, unit_price: "2000.00", taxes: "360.00" },
   ]);
 
   const role = user?.role || "STAFF";
@@ -40,13 +44,33 @@ export default function QuotationsView({ onConvertedToSubscription }) {
   async function loadData() {
     setLoading(true);
     try {
-      const [quotesRes, tmplsRes, usersRes] = await Promise.all([
+      const [quotesRes, tmplsRes, usersRes, prodsRes, plansRes] = await Promise.all([
         getQuotations(),
         getQuotationTemplates(),
         apiRequest("/users/").catch(() => ({ results: [] })),
+        getProducts({ page_size: 100 }).catch(() => ({ results: [] })),
+        getPlans({ page_size: 100 }).catch(() => ({ results: [] })),
       ]);
       setQuotations(quotesRes.results || quotesRes || []);
       setTemplates(tmplsRes.results || tmplsRes || []);
+
+      const pList = prodsRes.results || prodsRes || [];
+      const plList = plansRes.results || plansRes || [];
+      if (pList.length > 0) {
+        setAvailableProducts(pList);
+        setCustomLines([
+          {
+            product_id: pList[0].id,
+            quantity: 1,
+            unit_price: pList[0].sales_price,
+            taxes: (Number(pList[0].sales_price) * 0.18).toFixed(2),
+          },
+        ]);
+      }
+      if (plList.length > 0) {
+        setAvailablePlans(plList);
+        setCustomPlanId(String(plList[0].id));
+      }
 
       const userList = usersRes.results || usersRes || [];
       const custs = userList.filter((u) => u.role === "CUSTOMER");
@@ -208,12 +232,22 @@ export default function QuotationsView({ onConvertedToSubscription }) {
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
           {!isCustomer && (
-            <button className="btn-primary" onClick={() => setShowCustomModal(true)}>
-              + New Custom Quote
+            <button
+              className="btn-primary"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              onClick={() => setShowCustomModal(true)}
+            >
+              <Plus size={16} />
+              <span>New custom quote</span>
             </button>
           )}
-          <button className="btn-secondary" onClick={loadData}>
-            🔄 Refresh
+          <button
+            className="btn-secondary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={loadData}
+          >
+            <RotateCw size={14} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
@@ -413,8 +447,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                 <h3>Generate Quotation</h3>
                 <p className="card-subtitle">Template: {selectedTemplate.name}</p>
               </div>
-              <button className="btn-secondary" onClick={() => setSelectedTemplate(null)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setSelectedTemplate(null)}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -492,8 +530,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                 <h3>Create Custom Quotation</h3>
                 <p className="card-subtitle">Build a bespoke proposal with custom lines and terms</p>
               </div>
-              <button className="btn-secondary" onClick={() => setShowCustomModal(false)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setShowCustomModal(false)}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -539,9 +581,19 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                         marginTop: "0.3rem",
                       }}
                     >
-                      <option value="1">Monthly Starter (₹50/mo)</option>
-                      <option value="2">Pro Growth (₹150/mo)</option>
-                      <option value="3">Enterprise Annual (₹5,000/yr)</option>
+                      {availablePlans.length > 0 ? (
+                        availablePlans.map((pl) => (
+                          <option key={pl.id} value={pl.id}>
+                            {pl.name} (₹{Number(pl.price).toFixed(2)}/{pl.billing_period})
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="1">Monthly Starter (₹1,999.00/monthly)</option>
+                          <option value="2">Pro Growth (₹4,999.00/monthly)</option>
+                          <option value="3">Enterprise Annual (₹49,999.00/yearly)</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -623,12 +675,30 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                           <td>
                             <select
                               value={line.product_id}
-                              onChange={(e) => updateCustomLine(idx, "product_id", e.target.value)}
+                              onChange={(e) => {
+                                const pId = e.target.value;
+                                const prod = availableProducts.find((p) => String(p.id) === String(pId));
+                                updateCustomLine(idx, "product_id", pId);
+                                if (prod) {
+                                  updateCustomLine(idx, "unit_price", prod.sales_price);
+                                  updateCustomLine(idx, "taxes", (Number(prod.sales_price) * 0.18).toFixed(2));
+                                }
+                              }}
                               style={{ width: "100%", padding: "0.3rem" }}
                             >
-                              <option value="1">Standard SaaS Platform</option>
-                              <option value="2">Pro Analytics & Reporting</option>
-                              <option value="3">Enterprise Infrastructure</option>
+                              {availableProducts.length > 0 ? (
+                                availableProducts.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))
+                              ) : (
+                                <>
+                                  <option value="1">Brightloop CRM</option>
+                                  <option value="2">Brightloop ERP</option>
+                                  <option value="3">Priority Support add-on</option>
+                                </>
+                              )}
                             </select>
                           </td>
                           <td>
@@ -661,9 +731,17 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                               <button
                                 type="button"
                                 onClick={() => removeCustomLine(idx)}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "#DC2626" }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "#DC2626",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
                               >
-                                ✕
+                                <X size={14} />
                               </button>
                             )}
                           </td>
@@ -727,8 +805,12 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                   Reference: <strong>{previewQuote.quotation_number}</strong>
                 </p>
               </div>
-              <button className="btn-secondary" onClick={() => setPreviewQuote(null)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setPreviewQuote(null)}
+              >
+                <X size={16} />
               </button>
             </div>
 

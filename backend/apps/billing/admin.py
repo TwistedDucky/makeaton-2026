@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Invoice, InvoiceLine
+from .models import Invoice, InvoiceDiscount, InvoiceLine
 
 
 class InvoiceLineInline(admin.TabularInline):
@@ -8,11 +8,23 @@ class InvoiceLineInline(admin.TabularInline):
     extra = 0
     fields = [
         "product_name",
+        "product_id",
+        "variant_id",
+        "tax_id",
         "quantity",
         "unit_price",
         "discount_amount",
         "tax_amount",
         "line_total",
+    ]
+
+
+class InvoiceDiscountInline(admin.TabularInline):
+    model = InvoiceDiscount
+    extra = 0
+    fields = [
+        "discount_id",
+        "amount",
     ]
 
 
@@ -41,7 +53,7 @@ class InvoiceAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    inlines = [InvoiceLineInline]
+    inlines = [InvoiceLineInline, InvoiceDiscountInline]
 
 
 @admin.register(InvoiceLine)
@@ -50,11 +62,26 @@ class InvoiceLineAdmin(admin.ModelAdmin):
         "id",
         "invoice",
         "product_name",
+        "product_id",
+        "variant_id",
+        "tax_id",
         "quantity",
         "unit_price",
+        "discount_amount",
+        "tax_amount",
         "line_total",
     ]
-    search_fields = [
-        "product_name",
-        "invoice__number",
+    list_filter = ["invoice__status"]
+    search_fields = ["product_name", "invoice__number"]
+
+
+@admin.register(InvoiceDiscount)
+class InvoiceDiscountAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "invoice",
+        "discount_id",
+        "amount",
     ]
+    list_filter = ["invoice__status"]
+    search_fields = ["invoice__number", "discount_id"]

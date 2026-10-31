@@ -10,17 +10,27 @@ USE_REAL_SUBSCRIPTIONS controls whether get_due_subscriptions and
 advance_next_billing_date call Member 3's real implementation in
 apps.subscriptions.services or return local typed stubs.
 
-USE_REAL_PRICING controls whether price_invoice_lines and redeem_discounts
-call Member 2's pricing service in apps.catalog.services (not yet implemented)
-or return local typed stubs.
+USE_REAL_PRICING controls whether price_invoice_lines calls Member 2's
+pricing service in apps.catalog.services or returns local typed stubs.
+
+USE_REAL_DISCOUNT_USAGE controls whether discount usage recording is enabled
+with Member 2's catalog domain upon invoice confirmation.
 """
 
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
-USE_REAL_SUBSCRIPTIONS = True  # True = call apps.subscriptions.services
-USE_REAL_PRICING = False       # Member 2's service doesn't exist yet
+from django.conf import settings
+from django.utils import timezone
+
+from .models import quantize_money
+
+USE_REAL_SUBSCRIPTIONS = True       # True = call apps.subscriptions.services
+USE_REAL_PRICING = True             # True = call apps.catalog.services.price_invoice
+USE_REAL_DISCOUNT_USAGE = True      # True = call apps.catalog.services.record_discount_usage
+
+DEFAULT_PAYMENT_TERMS_DAYS = 30
 
 TWOPLACES = Decimal("0.01")
 
@@ -49,6 +59,7 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
                     "product_name": str,          # Descriptive display name (e.g. "Plan - Variant")
                     "quantity": int,              # Line quantity
                     "unit_price": Decimal,        # Unit price (including variant extra_price)
+                    "tax_id": Optional[int],      # Optional Catalog Tax ID
                 }
             ],
         }
@@ -60,7 +71,7 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
         )
         raw_subs = _real_get_due_subscriptions(target_date)
     else:
-        billing_date = target_date or date.today()
+        billing_date = target_date or timezone.localdate()
         period_start = billing_date.replace(day=1)
         period_end = (period_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
@@ -77,6 +88,7 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
                         "product_name": "Premium Cloud Suite - 50GB",
                         "quantity": 1,
                         "unit_price": Decimal("99.00"),
+                        "tax_id": 1,
                     },
                     {
                         "product_id": 2,
@@ -84,6 +96,7 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
                         "product_name": "Priority Support Add-on",
                         "quantity": 1,
                         "unit_price": Decimal("20.00"),
+                        "tax_id": None,
                     },
                 ],
             },
@@ -99,6 +112,7 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
                         "product_name": "Standard Plan Monthly",
                         "quantity": 1,
                         "unit_price": Decimal("30.00"),
+                        "tax_id": 2,
                     }
                 ],
             },
@@ -115,11 +129,19 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
                 f"Subscription {sub_id} missing period_start or period_end"
             )
 
-        lines = sub.get("lines") or []
-        for line in lines:
-            line["variant_id"] = line.get("variant_id")
+        new_lines = [
+            {**line, "variant_id": line.get("variant_id")}
+            for line in sub.get("lines") or []
+        ]
 
-        normalized_subs.append(sub)
+        norm_item: Dict[str, Any] = {
+            **sub,
+            "lines": new_lines,
+        }
+        if "payment_terms_days" in sub:
+            norm_item["payment_terms_days"] = sub["payment_terms_days"]
+
+        normalized_subs.append(norm_item)
 
     return normalized_subs
 
@@ -150,7 +172,7 @@ def advance_next_billing_date(subscription_id: int) -> Dict[str, Any]:
 
     return {
         "subscription_id": subscription_id,
-        "next_billing_date": date.today() + timedelta(days=30),
+        "next_billing_date": timezone.localdate() + timedelta(days=30),
         "status": "ACTIVE",
     }
 
@@ -160,60 +182,79 @@ def price_invoice_lines(
     billing_date: Optional[date] = None,
 ) -> Dict[str, Any]:
     """
-    Unified pricing adapter providing pure calculation for invoice lines.
+    Unified pricing adapter providing pricing and tax calculation for invoice lines.
 
-    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
+    If USE_REAL_PRICING is True, invokes apps.catalog.services.price_invoice.
+    Otherwise, returns fallback typed calculation while in development.
 
-    Contract with Member 2 (apps.catalog):
-    - Pure Calculation: MUST NOT record DiscountUsage or mutate database state.
-      Previewing or draft generation must not consume promotional usage limits.
-    - Discounts: Applies eligible discounts by product or subscription scope.
-      Discount cannot exceed line subtotal.
-    - Taxes: Tax is computed on the discounted amount (line_subtotal - discount_amount).
-    - Rounding: All money fields quantized to 2 decimal places with ROUND_HALF_UP.
-
-    Input Lines Structure:
-    [
-        {
-            "product_id": int,
-            "variant_id": Optional[int],
-            "product_name": str,
-            "quantity": int,
-            "unit_price": Decimal,
-        }
-    ]
-
-    Expected Return Structure:
-    {
-        "lines": [
-            {
-                "product_id": int,
-                "variant_id": Optional[int],
-                "discount_id": Optional[int],  # Populated if a catalog discount applied
-                "discount_amount": Decimal,
-                "tax_amount": Decimal,
-                "line_total": Decimal,
-            }
-        ],
-        "totals": {
-            "subtotal": Decimal,
-            "discount_total": Decimal,
-            "tax_total": Decimal,
-            "total": Decimal,
-        }
-    }
+    Guard:
+    If either stub flag (USE_REAL_PRICING or USE_REAL_DISCOUNT_USAGE) is False
+    and settings.DEBUG is False, raises RuntimeError.
     """
-    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
-    if USE_REAL_PRICING:
-        # TODO: Wire to Member 2's `apps.catalog.services.price_invoice` once implemented.
-        pass
+    if (not USE_REAL_PRICING or not USE_REAL_DISCOUNT_USAGE) and not getattr(settings, "DEBUG", True):
+        raise RuntimeError(
+            "Stub pricing cannot be used in production (DEBUG=False). "
+            "Real pricing and discount usage services must be enabled."
+        )
 
+    if USE_REAL_PRICING:
+        from apps.catalog.services import Line, price_invoice
+
+        catalog_lines = [
+            Line(
+                product_id=item["product_id"],
+                quantity=item.get("quantity", 1),
+                unit_price=Decimal(str(item.get("unit_price", "0.00"))),
+                tax_id=item.get("tax_id"),
+            )
+            for item in lines
+        ]
+        pricing_date = billing_date or timezone.localdate()
+        priced_invoice = price_invoice(catalog_lines, pricing_date)
+
+        mapped_lines = [
+            {
+                "product_id": line.product_id,
+                "variant_id": item.get("variant_id"),
+                "product_name": item.get("product_name", ""),
+                "quantity": line.quantity,
+                "unit_price": line.unit_price,
+                "discount_amount": line.line_discount,
+                "tax_amount": line.tax_amount,
+                "tax_id": line.tax_id,
+                "line_total": quantize_money(line.net + line.tax_amount),
+            }
+            for line, item in zip(priced_invoice.lines, lines)
+        ]
+
+        mapped_discounts = [
+            {
+                "discount_id": dl.discount_id,
+                "description": dl.description,
+                "amount": abs(dl.amount),
+                "line_index": dl.line_index,
+            }
+            for dl in priced_invoice.discount_lines
+        ]
+
+        return {
+            "lines": mapped_lines,
+            "discount_lines": mapped_discounts,
+            "totals": {
+                "subtotal": priced_invoice.subtotal,
+                "discount_total": priced_invoice.discount_total,
+                "tax_total": priced_invoice.tax_total,
+                "total": priced_invoice.total,
+            },
+        }
+
+    # Fallback typed stub calculation
     priced_lines = []
+    discount_lines = []
     subtotal = Decimal("0.00")
     discount_total = Decimal("0.00")
     tax_total = Decimal("0.00")
 
-    # Standard mock calculation: 10% discount on first line (if applicable), 10% tax on net
     for idx, item in enumerate(lines):
         qty = Decimal(item.get("quantity", 1))
         unit_price = Decimal(str(item.get("unit_price", "0.00")))
@@ -228,18 +269,29 @@ def price_invoice_lines(
         )
 
         discounted_sub = max(Decimal("0.00"), line_subtotal - discount_amount)
-        # Mock 10% tax rate on discounted amount
         tax_amount = (discounted_sub * Decimal("0.10")).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
         line_total = (discounted_sub + tax_amount).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
         priced_lines.append({
             "product_id": item.get("product_id"),
             "variant_id": item.get("variant_id"),
+            "product_name": item.get("product_name", ""),
+            "quantity": int(qty),
+            "unit_price": unit_price.quantize(TWOPLACES, rounding=ROUND_HALF_UP),
             "discount_id": discount_id,
             "discount_amount": discount_amount,
             "tax_amount": tax_amount,
+            "tax_id": item.get("tax_id"),
             "line_total": line_total,
         })
+
+        if discount_id and discount_amount > Decimal("0.00"):
+            discount_lines.append({
+                "discount_id": discount_id,
+                "description": "10% Early Bird Promotional Discount",
+                "amount": discount_amount,
+                "line_index": idx,
+            })
 
         subtotal += line_subtotal
         discount_total += discount_amount
@@ -249,6 +301,7 @@ def price_invoice_lines(
 
     return {
         "lines": priced_lines,
+        "discount_lines": discount_lines,
         "totals": {
             "subtotal": subtotal,
             "discount_total": discount_total,
@@ -262,90 +315,34 @@ def redeem_discounts(
     discount_ids: List[int],
     invoice_id: int,
     subscription_id: int,
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Record discount usage once an invoice is confirmed.
+    Usage is recorded at invoice CONFIRM.
 
-    # STUB: returns FAKE confirmation. Must not be used for real invoices.
+    Deduplicates discount_ids in sorted ascending order to prevent deadlocks.
+    When USE_REAL_DISCOUNT_USAGE is True, invokes apps.catalog.services.record_discount_usage
+    once per discount ID.
+    Returns:
+        {"all_recorded": bool, "failed_ids": [int, ...]}
+    """
+    distinct_ids = sorted(set(discount_ids))
 
-    Contract with Member 2 (apps.catalog):
-    - Separate State Mutation: Records DiscountUsage rows (fields: discount, invoice_id, subscription_id)
-      and increments Discount.used_count.
-    - Executed strictly upon invoice confirmation, never during draft preview.
+    if USE_REAL_DISCOUNT_USAGE:
+        from apps.catalog.services import record_discount_usage
 
-    Expected Return Structure:
-    [
-        {
-            "discount_id": int,
-            "invoice_id": int,
-            "recorded": bool,
+        failed_ids: List[int] = []
+        for d_id in distinct_ids:
+            success = record_discount_usage(d_id, invoice_id, subscription_id)
+            if not success:
+                failed_ids.append(d_id)
+
+        return {
+            "all_recorded": len(failed_ids) == 0,
+            "failed_ids": failed_ids,
         }
-    ]
-    """
-    # STUB: returns FAKE confirmation. Must not be used for real invoices.
-    if USE_REAL_PRICING:
-        # TODO: Wire to Member 2's `apps.catalog.services.record_discount_usage`
-        pass
 
-    return [
-        {
-            "discount_id": d_id,
-            "invoice_id": invoice_id,
-            "recorded": True,
-        }
-        for d_id in discount_ids
-    ]
-
-
-# ==============================================================================
-# BACKWARD COMPATIBILITY STUBS (Member 2 Catalog / Tax / Discounts)
-# ==============================================================================
-
-def calculate_tax(line: Dict[str, Any]) -> Decimal:
-    """
-    Calculate tax amount for an invoice line item.
-    Tax is calculated on the discounted amount (line_subtotal - discount_amount).
-
-    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
-    """
-    quantity = line.get("quantity", 1)
-    unit_price = line.get("unit_price", Decimal("0.00"))
-    discount = line.get("discount_amount", Decimal("0.00"))
-    line_subtotal = Decimal(quantity) * Decimal(unit_price)
-    discounted_subtotal = max(Decimal("0.00"), line_subtotal - Decimal(discount))
-    tax_rate = Decimal("0.10")
-    return (discounted_subtotal * tax_rate).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
-
-
-def get_applicable_discounts(subscription_id: int) -> List[Dict[str, Any]]:
-    """
-    Retrieve active discounts and promotional codes applicable to a subscription.
-
-    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
-    """
-    return [
-        {
-            "id": 1,
-            "code": "EARLYBIRD10",
-            "description": "10% Early Bird Promotional Discount",
-            "discount_type": "percentage",
-            "value": Decimal("10.00"),
-            "applicable_amount": Decimal("10.00"),
-        }
-    ]
-
-
-def redeem(discount_id: int) -> Dict[str, Any]:
-    """
-    Mark a promotional code or discount as redeemed/applied to prevent re-use.
-
-    # STUB: returns FAKE discounts and taxes. Must not be used for real invoices.
-    Interface owned by Member 2 (catalog, plans, tax rules, discount rules).
-    """
     return {
-        "discount_id": discount_id,
-        "redeemed": True,
-        "message": f"Discount {discount_id} marked as redeemed.",
+        "all_recorded": True,
+        "failed_ids": [],
     }
