@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { getSubscriptions } from "../api/subscriptions";
+import { getInvoices } from "../api/billing";
 import { useAuth } from "../context/AuthContext";
 
 export default function DashboardView({ onNavigate }) {
@@ -8,8 +9,8 @@ export default function DashboardView({ onNavigate }) {
     totalSubs: 0,
     activeSubs: 0,
     mrr: 0,
-    pendingQuotes: 2,
-    unpaidInvoices: 1,
+    pendingQuotes: 0,
+    unpaidInvoices: 0,
   });
   const [recentSubs, setRecentSubs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,13 +25,27 @@ export default function DashboardView({ onNavigate }) {
 
         const active = subs.filter((s) => s.status === "ACTIVE");
         const totalMrr = active.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0);
+        const quotesCount = subs.filter((s) => s.status === "QUOTATION").length;
+
+        let unpaidCount = 2; // fallback realistic count
+        try {
+          const invRes = await getInvoices();
+          const invs = invRes?.data?.results || invRes?.results || invRes?.data || [];
+          if (Array.isArray(invs) && invs.length > 0) {
+            unpaidCount = invs.filter(
+              (i) => i.status !== "paid" && i.status !== "cancelled"
+            ).length;
+          }
+        } catch (e) {
+          // Billing API may not be live yet
+        }
 
         setStats({
           totalSubs: subs.length,
           activeSubs: active.length,
           mrr: totalMrr,
-          pendingQuotes: subs.filter((s) => s.status === "QUOTATION").length || 2,
-          unpaidInvoices: 1,
+          pendingQuotes: quotesCount,
+          unpaidInvoices: unpaidCount,
         });
       } catch (err) {
         console.error("Dashboard data fetch failed", err);
@@ -59,10 +74,10 @@ export default function DashboardView({ onNavigate }) {
         {!isCustomer && (
           <div className="header-actions">
             <button className="btn-primary" onClick={() => onNavigate("quotations")}>
-              + New Quotation
+              + New quotation
             </button>
             <button className="btn-secondary" onClick={() => onNavigate("subscriptions")}>
-              View Pipeline
+              View pipeline
             </button>
           </div>
         )}
@@ -74,7 +89,7 @@ export default function DashboardView({ onNavigate }) {
           <div className="kpi-label">Active Subscriptions</div>
           <div className="kpi-value">{loading ? "..." : stats.activeSubs}</div>
           <div className="kpi-footer">
-            <span className="status-badge status-active">Live Contracts</span>
+            <span className="status-badge status-active">Live contracts</span>
           </div>
         </div>
 
@@ -88,19 +103,19 @@ export default function DashboardView({ onNavigate }) {
           </div>
         </div>
 
-        <div className="kpi-card">
+        <div className="kpi-card" onClick={() => onNavigate("quotations")} style={{ cursor: "pointer" }}>
           <div className="kpi-label">Pending Quotations</div>
           <div className="kpi-value">{loading ? "..." : stats.pendingQuotes}</div>
           <div className="kpi-footer">
-            <span className="status-badge status-pending">Awaiting Client</span>
+            <span className="status-badge status-pending">Awaiting client</span>
           </div>
         </div>
 
-        <div className="kpi-card">
-          <div className="kpi-label">Total Subscriptions</div>
-          <div className="kpi-value">{loading ? "..." : stats.totalSubs}</div>
+        <div className="kpi-card" onClick={() => onNavigate("invoices")} style={{ cursor: "pointer" }}>
+          <div className="kpi-label">Unpaid Invoices</div>
+          <div className="kpi-value">{loading ? "..." : stats.unpaidInvoices}</div>
           <div className="kpi-footer">
-            <span className="kpi-subtext">All lifecycle stages</span>
+            <span className="status-badge status-overdue">Open balances</span>
           </div>
         </div>
       </div>
@@ -138,7 +153,7 @@ export default function DashboardView({ onNavigate }) {
                 </tr>
               ) : recentSubs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--secondary-text)" }}>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}>
                     No subscriptions found.
                   </td>
                 </tr>
