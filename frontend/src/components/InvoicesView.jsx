@@ -7,6 +7,7 @@ import {
   cancelInvoice,
   generateInvoices,
 } from "../api/billing";
+import { AlertTriangle, X, CheckCircle2 } from "lucide-react";
 
 // Fallback mock invoices conforming strictly to Member 4's contract
 const MOCK_INVOICES = [
@@ -406,7 +407,10 @@ export default function InvoicesView({ onNavigate }) {
             alignItems: "center",
           }}
         >
-          <span>⚠️ {amountsChangedNotice}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <AlertTriangle size={18} />
+            <span>{amountsChangedNotice}</span>
+          </span>
           <button
             className="btn-secondary"
             style={{ padding: "0.25rem 0.6rem", fontSize: "0.8rem" }}
@@ -436,10 +440,17 @@ export default function InvoicesView({ onNavigate }) {
         >
           <span>{actionNotice}</span>
           <button
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)" }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--color-text-secondary)",
+              display: "flex",
+              alignItems: "center",
+            }}
             onClick={() => setActionNotice(null)}
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
       )}
@@ -674,8 +685,12 @@ export default function InvoicesView({ onNavigate }) {
                   <strong>{selectedInvoice.subscription_id || "N/A"}</strong>
                 </p>
               </div>
-              <button className="btn-secondary" onClick={() => setSelectedInvoice(null)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setSelectedInvoice(null)}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -691,9 +706,13 @@ export default function InvoicesView({ onNavigate }) {
                   fontSize: "var(--font-size-small)",
                   fontWeight: 600,
                   marginBottom: "1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
                 }}
               >
-                ⚠️ {amountsChangedNotice}
+                <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                <span>{amountsChangedNotice}</span>
               </div>
             )}
 
@@ -884,8 +903,12 @@ export default function InvoicesView({ onNavigate }) {
                   Run billing automation for all active subscriptions due on or before target date.
                 </p>
               </div>
-              <button className="btn-secondary" onClick={() => setShowGenerateModal(false)}>
-                ✕
+              <button
+                className="btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px" }}
+                onClick={() => setShowGenerateModal(false)}
+              >
+                <X size={16} />
               </button>
             </div>
 
