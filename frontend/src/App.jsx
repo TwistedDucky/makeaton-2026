@@ -12,6 +12,7 @@ import DiscountsView from "./components/DiscountsView";
 import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
+import ProtectedRoute from "./components/common/ProtectedRoute";
 import "./App.css";
 
 function DashboardLayout() {
@@ -331,46 +332,90 @@ function DashboardLayout() {
 
         {/* Dynamic View Content */}
         <main className="content-area">
-          {currentModule === "dashboard" && <DashboardView onNavigate={setCurrentModule} />}
-
-          {currentModule === "customers" && <CustomersView onNavigate={setCurrentModule} />}
-
-          {currentModule === "quotations" && (
-            <QuotationsView onConvertedToSubscription={() => setCurrentModule("subscriptions")} />
+          {currentModule === "dashboard" && (
+            <ProtectedRoute>
+              <DashboardView onNavigate={setCurrentModule} />
+            </ProtectedRoute>
           )}
 
-          {currentModule === "subscriptions" && <SubscriptionsView />}
+          {currentModule === "customers" && (
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
+              <CustomersView onNavigate={setCurrentModule} />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "catalog" && <CatalogView />}
+          {currentModule === "quotations" && (
+            <ProtectedRoute>
+              <QuotationsView onConvertedToSubscription={() => setCurrentModule("subscriptions")} />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "invoices" && <InvoicesView onNavigate={setCurrentModule} />}
+          {currentModule === "subscriptions" && (
+            <ProtectedRoute>
+              <SubscriptionsView />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "payments" && <PaymentsView />}
+          {currentModule === "catalog" && (
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
+              <CatalogView />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "discounts" && <DiscountsView />}
+          {currentModule === "invoices" && (
+            <ProtectedRoute>
+              <InvoicesView onNavigate={setCurrentModule} />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "billing-hook" && <Member4BillingSimulator />}
+          {currentModule === "payments" && (
+            <ProtectedRoute>
+              <PaymentsView />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "reports" && <ReportsView />}
+          {currentModule === "discounts" && (
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
+              <DiscountsView />
+            </ProtectedRoute>
+          )}
 
-          {currentModule === "settings" && <SettingsView />}
+          {currentModule === "billing-hook" && (
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
+              <Member4BillingSimulator />
+            </ProtectedRoute>
+          )}
+
+          {currentModule === "reports" && (
+            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
+              <ReportsView />
+            </ProtectedRoute>
+          )}
+
+          {currentModule === "settings" && (
+            <ProtectedRoute>
+              <SettingsView />
+            </ProtectedRoute>
+          )}
 
           {currentModule === "admin" && (
-            <div className="placeholder-module-card">
-              <h3>System Administration Portal</h3>
-              <p>
-                Django Admin provides direct database inspection for Accounts, Products, Quotations, Subscriptions, and Invoices.
-              </p>
-              <a
-                href="http://localhost:8001/admin/"
-                target="_blank"
-                rel="noreferrer"
-                className="btn-primary"
-                style={{ display: "inline-block", textDecoration: "none" }}
-              >
-                Launch Django Admin Portal ↗
-              </a>
-            </div>
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <div className="placeholder-module-card">
+                <h3>System Administration Portal</h3>
+                <p>
+                  Django Admin provides direct database inspection for Accounts, Products, Quotations, Subscriptions, and Invoices.
+                </p>
+                <a
+                  href="http://localhost:8001/admin/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-primary"
+                  style={{ display: "inline-block", textDecoration: "none" }}
+                >
+                  Launch Django Admin Portal ↗
+                </a>
+              </div>
+            </ProtectedRoute>
           )}
         </main>
       </div>
