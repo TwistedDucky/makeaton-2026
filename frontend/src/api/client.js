@@ -37,9 +37,23 @@ export async function apiRequest(endpoint, options = {}) {
         credentials: "include",
     });
 
-    // Handle empty responses
+    // Handle empty responses and safely parse JSON
     const text = await response.text();
-    const result = text ? JSON.parse(text) : {};
+    let result = {};
+    if (text) {
+        try {
+            result = JSON.parse(text);
+        } catch {
+            // Non-JSON response (e.g. HTML error page or plain text)
+            result = {
+                success: false,
+                message: !response.ok
+                    ? `Server error (${response.status}: ${response.statusText || "non-JSON response"})`
+                    : text,
+                raw: text,
+            };
+        }
+    }
 
     if (!response.ok) {
         throw result;
