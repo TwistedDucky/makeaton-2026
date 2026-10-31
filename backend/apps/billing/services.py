@@ -2,12 +2,15 @@
 Business logic and write services for billing (invoices, generation).
 """
 
+from collections import defaultdict
 from dataclasses import dataclass
+from datetime import date, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Union
+import logging
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from . import integrations
@@ -18,6 +21,8 @@ from .models import (
     InvoiceLine,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ConfirmResult:
@@ -25,6 +30,17 @@ class ConfirmResult:
 
     invoice: Invoice
     amounts_changed: bool
+
+
+@dataclass(frozen=True)
+class GenerationSummary:
+    """Summary returned by generate_invoices service."""
+
+    created: int
+    skipped_existing: int
+    advanced: int
+    errors: list[dict]
+    capped: list[int]
 
 
 class _DiscountUsageFailed(Exception):
@@ -159,3 +175,243 @@ def cancel_invoice(invoice: Union[Invoice, int]) -> Invoice:
             invoice.status = inv.status
             invoice.updated_at = inv.updated_at
         return inv
+
+
+def generate_invoices(
+    target_date: Optional[date] = None,
+    max_periods_per_subscription: int = 24,
+) -> GenerationSummary:
+    """
+    Generate recurring draft invoices for all due subscriptions.
+
+    - Exactly one top-level transaction.atomic() per subscription period.
+    - Repeatedly polls get_due_subscriptions until no more periods can be processed.
+    - Handles existing active invoices (skipped and advanced).
+    - Races handled gracefully via savepoint catching IntegrityError.
+    - Subscriptions with no lines or errors are isolated, logged, and excluded from re-poll.
+    - Never confirms invoices; generated invoices remain in DRAFT status.
+    """
+    eval_date = target_date or timezone.localdate()
+
+    created_count = 0
+    skipped_count = 0
+    advanced_count = 0
+    errors: List[Dict[str, Any]] = []
+    capped: List[int] = []
+    capped_subs: Set[int] = set()
+    errored_subs: Set[int] = set()
+    periods_count_by_sub: Dict[int, int] = defaultdict(int)
+    advanced_keys: Set[Tuple[int, Any]] = set()
+
+    while True:
+        due_subs = integrations.get_due_subscriptions(eval_date)
+        active_due = [
+            s
+            for s in due_subs
+            if s.get("id") not in errored_subs and s.get("id") not in capped_subs
+        ]
+        if not active_due:
+            break
+
+        processed_any = False
+        for sub in active_due:
+            sub_id = sub.get("id")
+            if sub_id in errored_subs or sub_id in capped_subs:
+                continue
+
+            period_start = sub.get("period_start")
+            period_end = sub.get("period_end")
+            customer_id = sub.get("customer_id")
+            lines = sub.get("lines") or []
+
+            # Guard against infinite loop if same (sub_id, period_start) returns after advance
+            if (sub_id, period_start) in advanced_keys:
+                err_msg = (
+                    f"Subscription {sub_id} returned same period_start {period_start} after advance"
+                )
+                logger.error(err_msg)
+                errors.append({
+                    "subscription_id": sub_id,
+                    "period_start": period_start,
+                    "error": err_msg,
+                })
+                errored_subs.add(sub_id)
+                continue
+
+            # Check if capped
+            if periods_count_by_sub[sub_id] >= max_periods_per_subscription:
+                if sub_id not in capped_subs:
+                    capped_subs.add(sub_id)
+                    capped.append(sub_id)
+                continue
+
+            # Subscription with no lines
+            if not lines:
+                err_msg = "no lines"
+                logger.error("Subscription %s period %s has no lines", sub_id, period_start)
+                errors.append({
+                    "subscription_id": sub_id,
+                    "period_start": period_start,
+                    "error": err_msg,
+                })
+                errored_subs.add(sub_id)
+                continue
+
+            try:
+                invoice_created = False
+                is_skipped = False
+                issue_date = timezone.localdate()
+
+                with transaction.atomic():
+                    existing_invoice = (
+                        Invoice.objects.filter(
+                            subscription_id=sub_id,
+                            period_start=period_start,
+                        )
+                        .exclude(status=Invoice.Status.CANCELLED)
+                        .first()
+                    )
+
+                    if existing_invoice:
+                        is_skipped = True
+                    else:
+                        priced = integrations.price_invoice_lines(
+                            lines, billing_date=issue_date
+                        )
+                        try:
+                            with transaction.atomic():
+                                terms_days = sub.get("payment_terms_days")
+                                if terms_days is None:
+                                    terms_days = integrations.DEFAULT_PAYMENT_TERMS_DAYS
+                                else:
+                                    terms_days = int(terms_days)
+
+                                due_date = issue_date + timedelta(days=terms_days)
+
+                                invoice = Invoice.objects.create(
+                                    customer_id=customer_id,
+                                    subscription_id=sub_id,
+                                    period_start=period_start,
+                                    period_end=period_end,
+                                    issue_date=issue_date,
+                                    due_date=due_date,
+                                    status=Invoice.Status.DRAFT,
+                                )
+
+                                line_objs = []
+                                for pl in priced.get("lines", []):
+                                    qty = pl.get("quantity", 1)
+                                    u_price = Decimal(str(pl.get("unit_price", "0.00")))
+                                    d_amt = Decimal(str(pl.get("discount_amount", "0.00")))
+                                    t_amt = Decimal(str(pl.get("tax_amount", "0.00")))
+                                    l_tot = pl.get("line_total")
+                                    if l_tot is None:
+                                        l_tot = (Decimal(qty) * u_price - d_amt + t_amt).quantize(
+                                            Decimal("0.01")
+                                        )
+                                    else:
+                                        l_tot = Decimal(str(l_tot))
+
+                                    line_objs.append(
+                                        InvoiceLine(
+                                            invoice=invoice,
+                                            product_id=pl.get("product_id"),
+                                            variant_id=pl.get("variant_id"),
+                                            product_name=pl.get("product_name", ""),
+                                            quantity=qty,
+                                            unit_price=u_price,
+                                            discount_amount=d_amt,
+                                            tax_amount=t_amt,
+                                            tax_id=pl.get("tax_id"),
+                                            line_total=l_tot,
+                                        )
+                                    )
+                                InvoiceLine.objects.bulk_create(line_objs)
+
+                                discount_totals: Dict[int, Decimal] = {}
+                                for dl in priced.get("discount_lines", []):
+                                    d_id = dl["discount_id"]
+                                    amt = Decimal(str(dl["amount"]))
+                                    discount_totals[d_id] = (
+                                        discount_totals.get(d_id, Decimal("0.00")) + amt
+                                    )
+
+                                disc_objs = [
+                                    InvoiceDiscount(invoice=invoice, discount_id=d_id, amount=amt)
+                                    for d_id, amt in discount_totals.items()
+                                    if amt > Decimal("0.00")
+                                ]
+                                if disc_objs:
+                                    InvoiceDiscount.objects.bulk_create(disc_objs)
+
+                                invoice.recalculate_totals()
+
+                                priced_totals = priced.get("totals", {})
+                                exp_total = Decimal(str(priced_totals.get("total", "0.00")))
+                                exp_disc_total = Decimal(
+                                    str(priced_totals.get("discount_total", "0.00"))
+                                )
+                                sum_disc = sum((d.amount for d in disc_objs), Decimal("0.00"))
+
+                                if invoice.total != exp_total:
+                                    raise ValidationError(
+                                        f"Invoice total mismatch: {invoice.total} != {exp_total}"
+                                    )
+                                if invoice.discount_total != exp_disc_total:
+                                    raise ValidationError(
+                                        f"Invoice discount_total mismatch: {invoice.discount_total} != {exp_disc_total}"
+                                    )
+                                if sum_disc != invoice.discount_total:
+                                    raise ValidationError(
+                                        f"InvoiceDiscount sum mismatch: {sum_disc} != {invoice.discount_total}"
+                                    )
+
+                                invoice_created = True
+                                is_skipped = False
+                        except IntegrityError:
+                            is_skipped = True
+                            invoice_created = False
+
+                    # Advance subscription in the same top-level atomic block
+                    integrations.advance_next_billing_date(sub_id)
+
+                # Committed successfully
+                if invoice_created:
+                    created_count += 1
+                if is_skipped:
+                    skipped_count += 1
+
+                advanced_count += 1
+                processed_any = True
+                advanced_keys.add((sub_id, period_start))
+                periods_count_by_sub[sub_id] += 1
+
+                if periods_count_by_sub[sub_id] >= max_periods_per_subscription:
+                    if sub_id not in capped_subs:
+                        capped_subs.add(sub_id)
+                        capped.append(sub_id)
+
+            except Exception as exc:
+                logger.exception(
+                    "Error generating invoice for subscription %s period %s: %s",
+                    sub_id,
+                    period_start,
+                    exc,
+                )
+                errors.append({
+                    "subscription_id": sub_id,
+                    "period_start": period_start,
+                    "error": str(exc),
+                })
+                errored_subs.add(sub_id)
+
+        if not processed_any:
+            break
+
+    return GenerationSummary(
+        created=created_count,
+        skipped_existing=skipped_count,
+        advanced=advanced_count,
+        errors=errors,
+        capped=capped,
+    )

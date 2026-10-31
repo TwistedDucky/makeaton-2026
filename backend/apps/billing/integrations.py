@@ -27,8 +27,10 @@ from django.utils import timezone
 from .models import quantize_money
 
 USE_REAL_SUBSCRIPTIONS = True       # True = call apps.subscriptions.services
-USE_REAL_PRICING = False            # True = call apps.catalog.services.price_invoice
+USE_REAL_PRICING = True             # True = call apps.catalog.services.price_invoice
 USE_REAL_DISCOUNT_USAGE = False     # True = call apps.catalog.services.record_discount_usage
+
+DEFAULT_PAYMENT_TERMS_DAYS = 30
 
 TWOPLACES = Decimal("0.01")
 
@@ -132,10 +134,14 @@ def get_due_subscriptions(target_date: Optional[date] = None) -> List[Dict[str, 
             for line in sub.get("lines") or []
         ]
 
-        normalized_subs.append({
+        norm_item: Dict[str, Any] = {
             **sub,
             "lines": new_lines,
-        })
+        }
+        if "payment_terms_days" in sub:
+            norm_item["payment_terms_days"] = sub["payment_terms_days"]
+
+        normalized_subs.append(norm_item)
 
     return normalized_subs
 
