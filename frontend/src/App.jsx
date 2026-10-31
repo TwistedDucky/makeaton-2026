@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout } from "./api/auth";
-import SubscriptionsView from "./components/SubscriptionsView";
+import DashboardView from "./components/DashboardView";
+import CustomersView from "./components/CustomersView";
+import CatalogView from "./components/CatalogView";
 import QuotationsView from "./components/QuotationsView";
+import SubscriptionsView from "./components/SubscriptionsView";
+import InvoicesView from "./components/InvoicesView";
+import PaymentsView from "./components/PaymentsView";
+import DiscountsView from "./components/DiscountsView";
+import ReportsView from "./components/ReportsView";
+import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import "./App.css";
 
 function DashboardLayout() {
   const { user, setUser } = useAuth();
-  const [currentModule, setCurrentModule] = useState("subscriptions");
+  const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
   const [globalSearch, setGlobalSearch] = useState("");
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     initializeCsrf()
@@ -43,8 +52,15 @@ function DashboardLayout() {
     }
   }
 
-  const role = user?.role || "GUEST";
+  const role = user?.role || "STAFF";
   const isCustomer = role === "CUSTOMER";
+  const isAdmin = role === "ADMIN";
+
+  const notifications = [
+    { id: 1, title: "Quotation Accepted", desc: "Acme Corp approved Q-1001 ($208.86)", time: "10m ago" },
+    { id: 2, title: "Contract Billing Due", desc: "SUB-2026-0001 ready for invoice cycle", time: "1h ago" },
+    { id: 3, title: "Payment Recorded", desc: "Stark Industries paid INV-2026-0002 ($1,475.00)", time: "3h ago" },
+  ];
 
   return (
     <div className="brightloop-app">
@@ -59,23 +75,35 @@ function DashboardLayout() {
         </div>
 
         <div className="sidebar-user-pill">
-          <span className="user-avatar">{user ? user.email[0].toUpperCase() : "?"}</span>
+          <span className="user-avatar">{user ? user.email[0].toUpperCase() : "S"}</span>
           <div className="user-details">
-            <strong>{user ? user.email.split("@")[0] : "Guest User"}</strong>
+            <strong>{user ? user.email.split("@")[0] : "Demo Session"}</strong>
             <span className={`role-badge role-${role.toLowerCase()}`}>{role}</span>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-label">CONTRACTS & SALES</div>
+          <div className="nav-section-label">OVERVIEW</div>
 
           <button
-            className={`nav-item ${currentModule === "subscriptions" ? "active" : ""}`}
-            onClick={() => setCurrentModule("subscriptions")}
+            className={`nav-item ${currentModule === "dashboard" ? "active" : ""}`}
+            onClick={() => setCurrentModule("dashboard")}
           >
-            <span className="nav-icon">📋</span>
-            <span>Subscriptions</span>
+            <span className="nav-icon">📊</span>
+            <span>Dashboard</span>
           </button>
+
+          {!isCustomer && (
+            <button
+              className={`nav-item ${currentModule === "customers" ? "active" : ""}`}
+              onClick={() => setCurrentModule("customers")}
+            >
+              <span className="nav-icon">👥</span>
+              <span>Customers</span>
+            </button>
+          )}
+
+          <div className="nav-section-label">{isCustomer ? "MY PORTAL" : "SALES & CONTRACTS"}</div>
 
           {!isCustomer && (
             <button
@@ -87,41 +115,95 @@ function DashboardLayout() {
             </button>
           )}
 
+          <button
+            className={`nav-item ${currentModule === "subscriptions" ? "active" : ""}`}
+            onClick={() => setCurrentModule("subscriptions")}
+          >
+            <span className="nav-icon">📋</span>
+            <span>{isCustomer ? "My Subscriptions" : "Subscriptions"}</span>
+          </button>
+
           {!isCustomer && (
-            <button
-              className={`nav-item ${currentModule === "billing-hook" ? "active" : ""}`}
-              onClick={() => setCurrentModule("billing-hook")}
-            >
-              <span className="nav-icon">⚡</span>
-              <span>Billing Engine (M4)</span>
-            </button>
+            <>
+              <div className="nav-section-label">CATALOG & PRICING</div>
+
+              <button
+                className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
+                onClick={() => setCurrentModule("catalog")}
+              >
+                <span className="nav-icon">📦</span>
+                <span>Products & Plans</span>
+              </button>
+
+              <button
+                className={`nav-item ${currentModule === "discounts" ? "active" : ""}`}
+                onClick={() => setCurrentModule("discounts")}
+              >
+                <span className="nav-icon">🏷️</span>
+                <span>Discounts</span>
+              </button>
+            </>
           )}
 
-          <div className="nav-section-label">TEAM MODULES</div>
-
-          <button
-            className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
-            onClick={() => setCurrentModule("catalog")}
-          >
-            <span className="nav-icon">📦</span>
-            <span>Products & Plans (M2)</span>
-          </button>
+          <div className="nav-section-label">FINANCE & BILLING</div>
 
           <button
             className={`nav-item ${currentModule === "invoices" ? "active" : ""}`}
             onClick={() => setCurrentModule("invoices")}
           >
             <span className="nav-icon">🧾</span>
-            <span>Invoices (M4)</span>
+            <span>{isCustomer ? "My Invoices" : "Invoices"}</span>
           </button>
 
           <button
-            className={`nav-item ${currentModule === "admin" ? "active" : ""}`}
-            onClick={() => setCurrentModule("admin")}
+            className={`nav-item ${currentModule === "payments" ? "active" : ""}`}
+            onClick={() => setCurrentModule("payments")}
           >
-            <span className="nav-icon">🛡️</span>
-            <span>Django Admin</span>
+            <span className="nav-icon">💳</span>
+            <span>{isCustomer ? "My Payments" : "Payments"}</span>
           </button>
+
+          {!isCustomer && (
+            <button
+              className={`nav-item ${currentModule === "billing-hook" ? "active" : ""}`}
+              onClick={() => setCurrentModule("billing-hook")}
+            >
+              <span className="nav-icon">⚡</span>
+              <span>Billing Simulator (M4)</span>
+            </button>
+          )}
+
+          {!isCustomer && (
+            <>
+              <div className="nav-section-label">MANAGEMENT</div>
+
+              <button
+                className={`nav-item ${currentModule === "reports" ? "active" : ""}`}
+                onClick={() => setCurrentModule("reports")}
+              >
+                <span className="nav-icon">📈</span>
+                <span>Reports</span>
+              </button>
+            </>
+          )}
+
+          <button
+            className={`nav-item ${currentModule === "settings" ? "active" : ""}`}
+            onClick={() => setCurrentModule("settings")}
+          >
+            <span className="nav-icon">⚙️</span>
+            <span>Settings</span>
+          </button>
+
+          {isAdmin && (
+            <button
+              className={`nav-item ${currentModule === "admin" ? "active" : ""}`}
+              onClick={() => setCurrentModule("admin")}
+            >
+              <span className="nav-icon">🛡️</span>
+              <span>Django Admin</span>
+            </button>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -129,7 +211,7 @@ function DashboardLayout() {
             <span className="health-dot"></span>
             <span>Backend: {backendStatus}</span>
           </div>
-          <small className="build-version">Brightloop v1.0 • Member 3</small>
+          <small className="build-version">Brightloop v1.0 • Midnight & Vanilla</small>
         </div>
       </aside>
 
@@ -148,9 +230,78 @@ function DashboardLayout() {
           </div>
 
           <div className="topbar-right">
+            {/* Notification Bell */}
+            <div style={{ position: "relative" }}>
+              <button
+                className="btn-secondary"
+                style={{ padding: "0.45rem 0.75rem", borderRadius: "8px", position: "relative" }}
+                onClick={() => setShowNotifications(!showNotifications)}
+                title="Notifications"
+              >
+                🔔
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "-4px",
+                    right: "-4px",
+                    backgroundColor: "#DC2626",
+                    color: "#FFFFFF",
+                    fontSize: "0.65rem",
+                    fontWeight: "700",
+                    borderRadius: "50%",
+                    width: "16px",
+                    height: "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  3
+                </span>
+              </button>
+
+              {showNotifications && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "42px",
+                    width: "280px",
+                    backgroundColor: "#FFFFFF",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    padding: "0.75rem",
+                    zIndex: 100,
+                  }}
+                >
+                  <strong style={{ fontSize: "0.85rem", color: "var(--midnight-indigo)" }}>
+                    System Notifications
+                  </strong>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        style={{
+                          padding: "0.4rem 0.5rem",
+                          backgroundColor: "var(--soft-vanilla)",
+                          borderRadius: "4px",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        <div style={{ fontWeight: "600", color: "var(--midnight-indigo)" }}>{n.title}</div>
+                        <div style={{ color: "var(--secondary-text)" }}>{n.desc}</div>
+                        <div style={{ fontSize: "0.65rem", color: "#9CA3AF", marginTop: "0.2rem" }}>{n.time}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Quick Demo Switcher */}
             <div className="demo-switcher">
-              <span className="switcher-label">Demo Role:</span>
+              <span className="switcher-label">Role:</span>
               <button
                 className={`switch-btn ${role === "STAFF" ? "selected" : ""}`}
                 onClick={() => handleDemoLogin("sales@example.com", "Staff123!")}
@@ -180,59 +331,29 @@ function DashboardLayout() {
 
         {/* Dynamic View Content */}
         <main className="content-area">
-          {currentModule === "subscriptions" && <SubscriptionsView />}
+          {currentModule === "dashboard" && <DashboardView onNavigate={setCurrentModule} />}
+
+          {currentModule === "customers" && <CustomersView onNavigate={setCurrentModule} />}
 
           {currentModule === "quotations" && (
-            <QuotationsView
-              onConvertedToSubscription={() => setCurrentModule("subscriptions")}
-            />
+            <QuotationsView onConvertedToSubscription={() => setCurrentModule("subscriptions")} />
           )}
+
+          {currentModule === "subscriptions" && <SubscriptionsView />}
+
+          {currentModule === "catalog" && <CatalogView />}
+
+          {currentModule === "invoices" && <InvoicesView onNavigate={setCurrentModule} />}
+
+          {currentModule === "payments" && <PaymentsView />}
+
+          {currentModule === "discounts" && <DiscountsView />}
 
           {currentModule === "billing-hook" && <Member4BillingSimulator />}
 
-          {currentModule === "catalog" && (
-            <div className="placeholder-module-card">
-              <h3>Member 2: Products & Plans Catalog</h3>
-              <p>
-                Products, pricing variants, and billing periods (`daily`, `weekly`, `monthly`, `yearly`) are fully integrated and available via REST API at <code>/api/catalog/</code>.
-              </p>
-              <div className="module-links">
-                <button className="btn-primary" onClick={() => setCurrentModule("quotations")}>
-                  View Quotations using Catalog Products ➔
-                </button>
-                <a
-                  href="http://localhost:8001/admin/catalog/product/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary"
-                >
-                  Manage Products in Admin ↗
-                </a>
-              </div>
-            </div>
-          )}
+          {currentModule === "reports" && <ReportsView />}
 
-          {currentModule === "invoices" && (
-            <div className="placeholder-module-card">
-              <h3>Member 4: Invoice Generation & Payments</h3>
-              <p>
-                The subscription state machine actively provides due contract data via <code>get_due_subscriptions()</code> and advances billing cycles via <code>advance_next_billing_date()</code>.
-              </p>
-              <div className="module-links">
-                <button className="btn-primary" onClick={() => setCurrentModule("billing-hook")}>
-                  Open Member 4 Billing Simulator ➔
-                </button>
-                <a
-                  href="http://localhost:8001/admin/billing/invoice/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary"
-                >
-                  Manage Invoices in Admin ↗
-                </a>
-              </div>
-            </div>
-          )}
+          {currentModule === "settings" && <SettingsView />}
 
           {currentModule === "admin" && (
             <div className="placeholder-module-card">
