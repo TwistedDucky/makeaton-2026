@@ -37,7 +37,9 @@ export async function apiRequest(endpoint, options = {}) {
         credentials: "include",
     });
 
-    const result = await response.json();
+    // Handle empty responses
+    const text = await response.text();
+    const result = text ? JSON.parse(text) : {};
 
     if (!response.ok) {
         throw result;
