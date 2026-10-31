@@ -4,7 +4,8 @@ Views and API endpoints for billing (invoices).
 from datetime import date
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Q
+from django.db.models import F, Q
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -144,10 +145,14 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
                     }
                 )
 
-        # 4. overdue=true (use billing.selectors.overdue_invoices on already-filtered queryset)
+        # 4. overdue=true (filter directly on queryset: confirmed, due_date < localdate, total > amount_paid)
         overdue_param = params.get("overdue")
         if overdue_param is not None and overdue_param.lower() in ("true", "1"):
-            qs = qs.filter(id__in=selectors.overdue_invoices())
+            qs = qs.filter(
+                status=Invoice.Status.CONFIRMED,
+                due_date__lt=timezone.localdate(),
+                total__gt=F("amount_paid"),
+            )
 
         # 5. search (number icontains; for staff/admin also customer email icontains; customers: number only)
         search_query = params.get("search")

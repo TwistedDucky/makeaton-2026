@@ -3199,3 +3199,98 @@ class RunBillingCommandTests(TestCase):
         self.assertIn("--max-periods must be >= 1", str(ctx.exception))
 
 
+class PaymentTermsDueDateTests(TestCase):
+    """
+    Step C (NET_15): generate_invoices with a mocked subscription carrying
+    payment_terms_days 0, 15, 30, 60 gives due_date == issue_date + N;
+    missing payment_terms_days defaults to 30.
+    """
+
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            email="terms_customer@example.com",
+            password="testpassword123",
+            role=User.Role.CUSTOMER,
+        )
+
+    def _mock_priced(self, lines, billing_date=None):
+        return {
+            "lines": [
+                {
+                    "product_id": 1,
+                    "variant_id": None,
+                    "product_name": "Test Item",
+                    "quantity": 1,
+                    "unit_price": Decimal("100.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "tax_amount": Decimal("0.00"),
+                    "tax_id": None,
+                    "line_total": Decimal("100.00"),
+                }
+            ],
+            "discount_lines": [],
+            "totals": {
+                "subtotal": Decimal("100.00"),
+                "discount_total": Decimal("0.00"),
+                "tax_total": Decimal("0.00"),
+                "total": Decimal("100.00"),
+            },
+        }
+
+    def _run_test(self, terms_days):
+        from unittest.mock import patch
+        from apps.billing import integrations
+        from apps.billing.models import Invoice
+        from apps.billing.services import generate_invoices
+
+        sub_dict = {
+            "id": 9900 + (terms_days if terms_days is not None else 99),
+            "customer_id": self.customer.id,
+            "period_start": date(2026, 3, 1),
+            "period_end": date(2026, 3, 31),
+            "lines": [
+                {
+                    "product_id": 1,
+                    "product_name": "Test Item",
+                    "quantity": 1,
+                    "unit_price": Decimal("100.00"),
+                    "tax_id": None,
+                }
+            ],
+        }
+        if terms_days is not None:
+            sub_dict["payment_terms_days"] = terms_days
+
+        with patch.object(integrations, "get_due_subscriptions", side_effect=[[sub_dict], []]):
+            with patch.object(integrations, "advance_next_billing_date", return_value={"status": "ACTIVE"}):
+                with patch.object(integrations, "price_invoice_lines", side_effect=self._mock_priced):
+                    summary = generate_invoices(target_date=date(2026, 3, 1))
+
+        self.assertEqual(summary.created, 1)
+        invoice = Invoice.objects.get(subscription_id=sub_dict["id"])
+        expected_days = 30 if terms_days is None else terms_days
+        self.assertEqual(invoice.due_date, invoice.issue_date + timedelta(days=expected_days))
+        return invoice
+
+    def test_payment_terms_days_0(self):
+        invoice = self._run_test(0)
+        self.assertEqual(invoice.due_date, invoice.issue_date)
+
+    def test_payment_terms_days_15(self):
+        invoice = self._run_test(15)
+        self.assertEqual(invoice.due_date, invoice.issue_date + timedelta(days=15))
+
+    def test_payment_terms_days_30(self):
+        invoice = self._run_test(30)
+        self.assertEqual(invoice.due_date, invoice.issue_date + timedelta(days=30))
+
+    def test_payment_terms_days_60(self):
+        invoice = self._run_test(60)
+        self.assertEqual(invoice.due_date, invoice.issue_date + timedelta(days=60))
+
+    def test_payment_terms_days_missing_defaults_to_30(self):
+        invoice = self._run_test(None)
+        self.assertEqual(invoice.due_date, invoice.issue_date + timedelta(days=30))
+
+
+
