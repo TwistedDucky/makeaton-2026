@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getSubscriptions } from "../api/subscriptions";
 import { getInvoices } from "../api/billing";
 import { useAuth } from "../context/AuthContext";
-import { Plus } from "lucide-react";
+import { Plus, Package } from "lucide-react";
 
 export default function DashboardView({ onNavigate }) {
   const { user } = useAuth();
@@ -72,7 +72,17 @@ export default function DashboardView({ onNavigate }) {
               : "Real-time subscription metrics, contract stages, and monthly recurring revenue."}
           </p>
         </div>
-        {!isCustomer && (
+        {isCustomer ? (
+          <div className="header-actions">
+            <button className="btn-primary" onClick={() => onNavigate("catalog")}>
+              <Package size={16} />
+              <span>Explore & subscribe</span>
+            </button>
+            <button className="btn-secondary" onClick={() => onNavigate("subscriptions")}>
+              <span>My subscriptions</span>
+            </button>
+          </div>
+        ) : (
           <div className="header-actions">
             <button className="btn-primary" onClick={() => onNavigate("quotations")}>
               <Plus size={16} />

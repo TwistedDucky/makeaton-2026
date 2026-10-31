@@ -188,6 +188,17 @@ def get_due_subscriptions(target_date: date = None) -> list[dict]:
         .prefetch_related("lines__product", "lines__variant")
     )
 
+    TERM_DAYS_MAP = {
+        Subscription.PaymentTerms.IMMEDIATE: 0,
+        Subscription.PaymentTerms.NET_15: 15,
+        Subscription.PaymentTerms.NET_30: 30,
+        Subscription.PaymentTerms.NET_60: 60,
+        "IMMEDIATE": 0,
+        "NET_15": 15,
+        "NET_30": 30,
+        "NET_60": 60,
+    }
+
     results = []
     for sub in due_subs:
         lines_data = []
@@ -204,12 +215,14 @@ def get_due_subscriptions(target_date: date = None) -> list[dict]:
 
         period_start = sub.current_period_start or sub.start_date or eval_date
         period_end = sub.current_period_end or calculate_period_end(period_start, sub.plan.billing_period)
+        payment_terms_days = TERM_DAYS_MAP.get(sub.payment_terms, 30)
 
         results.append({
             "id": sub.id,
             "customer_id": sub.customer_id,
             "period_start": period_start,
             "period_end": period_end,
+            "payment_terms_days": payment_terms_days,
             "lines": lines_data,
         })
 

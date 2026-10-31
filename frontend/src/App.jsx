@@ -10,6 +10,7 @@ import InvoicesView from "./components/InvoicesView";
 import PaymentsView from "./components/PaymentsView";
 import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
+import CatalogView from "./components/CatalogView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
@@ -36,7 +37,6 @@ import {
   TrendingUp,
   Settings,
   Shield,
-  Search,
   LogOut,
   Bell,
   ChevronDown,
@@ -48,7 +48,6 @@ export function DashboardLayout() {
   const { user, setUser } = useAuth();
   const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
-  const [globalSearch, setGlobalSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   async function handleDemoLogin(email, password) {
@@ -167,15 +166,13 @@ export function DashboardLayout() {
             </button>
           )}
 
-          {!isCustomer && (
-            <button
-              className={`nav-item ${currentModule === "quotations" ? "active" : ""}`}
-              onClick={() => setCurrentModule("quotations")}
-            >
-              <span className="nav-icon"><Briefcase size={18} /></span>
-              <span>Quotations</span>
-            </button>
-          )}
+          <button
+            className={`nav-item ${currentModule === "quotations" ? "active" : ""}`}
+            onClick={() => setCurrentModule("quotations")}
+          >
+            <span className="nav-icon"><Briefcase size={18} /></span>
+            <span>{isCustomer ? "My Offers" : "Quotations"}</span>
+          </button>
 
           <button
             className={`nav-item ${currentModule === "subscriptions" ? "active" : ""}`}
@@ -185,24 +182,22 @@ export function DashboardLayout() {
             <span>{isCustomer ? "My Subscriptions" : "Subscriptions"}</span>
           </button>
 
-          {!isCustomer && (
-            <>
-              <button
-                className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
-                onClick={() => setCurrentModule("catalog")}
-              >
-                <span className="nav-icon"><Package size={18} /></span>
-                <span>Products & Plans</span>
-              </button>
+          <button
+            className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
+            onClick={() => setCurrentModule("catalog")}
+          >
+            <span className="nav-icon"><Package size={18} /></span>
+            <span>{isCustomer ? "Explore Products" : "Products & Plans"}</span>
+          </button>
 
-              <button
-                className={`nav-item ${currentModule === "discounts" ? "active" : ""}`}
-                onClick={() => setCurrentModule("discounts")}
-              >
-                <span className="nav-icon"><Tag size={18} /></span>
-                <span>Discounts</span>
-              </button>
-            </>
+          {!isCustomer && (
+            <button
+              className={`nav-item ${currentModule === "discounts" ? "active" : ""}`}
+              onClick={() => setCurrentModule("discounts")}
+            >
+              <span className="nav-icon"><Tag size={18} /></span>
+              <span>Discounts</span>
+            </button>
           )}
 
           <button
@@ -328,16 +323,6 @@ export function DashboardLayout() {
       <div className="main-wrapper">
         {/* Top Navigation Bar */}
         <header className="topbar">
-          <div className="topbar-search">
-            <span className="search-icon"><Search size={16} /></span>
-            <input
-              type="text"
-              placeholder="Search contracts, quotations, customer email..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-            />
-          </div>
-
           <div className="topbar-right">
             <button
               className="topbar-bell-btn"
@@ -349,22 +334,6 @@ export function DashboardLayout() {
               <span className="bell-badge-dot"></span>
             </button>
 
-            <div className="role-select-box">
-              <span>Role:</span>
-              <select
-                value={role}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "STAFF") handleDemoLogin("sales@example.com", "Staff123!");
-                  else if (val === "CUSTOMER") handleDemoLogin("acme@corp.com", "Customer123!");
-                  else if (val === "ADMIN") handleDemoLogin("admin@example.com", "Admin123!");
-                }}
-              >
-                <option value="STAFF">Staff (Sales)</option>
-                <option value="CUSTOMER">Customer (Acme)</option>
-                <option value="ADMIN">Administrator</option>
-              </select>
-            </div>
             {user && (
               <button
                 className="btn-secondary"
@@ -411,11 +380,15 @@ export function DashboardLayout() {
           )}
 
           {currentModule === "catalog" && (
-            <ProtectedRoute allowedRoles={["STAFF", "ADMIN"]}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-                <ProductsAdmin />
-                <PlansAdmin />
-              </div>
+            <ProtectedRoute>
+              {isCustomer ? (
+                <CatalogView onNavigate={setCurrentModule} />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                  <ProductsAdmin />
+                  <PlansAdmin />
+                </div>
+              )}
             </ProtectedRoute>
           )}
 

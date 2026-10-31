@@ -1,35 +1,44 @@
 import React, { useState, useEffect } from "react";
 import { getReports } from "../api/reports";
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 
 export default function ReportsView() {
-  const [metrics, setMetrics] = useState([
-    { label: "Monthly Recurring Revenue (MRR)", value: "₹6,683.86", change: "+12.4% vs last month" },
-    { label: "Annual Run-Rate (ARR)", value: "₹80,206.32", change: "+18.2% YoY" },
-    { label: "Average Revenue Per User (ARPU)", value: "₹1,670.96", change: "Healthy SaaS benchmark" },
-    { label: "Net Revenue Retention (NRR)", value: "114%", change: "Low contract churn (< 2%)" },
-  ]);
+  const [metrics, setMetrics] = useState([]);
+  const [stageBreakdown, setStageBreakdown] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [stageBreakdown, setStageBreakdown] = useState([
-    { stage: "Active", count: 4, percentage: 50, color: "var(--color-status-active-text)", bg: "var(--color-status-active-bg)" },
-    { stage: "Quotation / Under Review", count: 2, percentage: 25, color: "var(--color-status-pending-text)", bg: "var(--color-status-pending-bg)" },
-    { stage: "Confirmed", count: 1, percentage: 12.5, color: "var(--color-status-confirmed-text)", bg: "var(--color-status-confirmed-bg)" },
-    { stage: "Draft", count: 1, percentage: 12.5, color: "var(--color-text-secondary)", bg: "var(--color-muted)" },
-  ]);
+  async function loadReports() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getReports();
+      const data = res?.data || res;
+      if (data?.metrics && Array.isArray(data.metrics)) {
+        setMetrics(data.metrics);
+      } else {
+        setMetrics([]);
+      }
+      if (data?.stageBreakdown && Array.isArray(data.stageBreakdown)) {
+        setStageBreakdown(data.stageBreakdown);
+      } else {
+        setStageBreakdown([]);
+      }
+    } catch (err) {
+      console.error("Failed to load reports:", err);
+      const errMsg =
+        err?.message ||
+        (typeof err === "string" ? err : null) ||
+        (err?.errors ? JSON.stringify(err.errors) : "Failed to load financial reports from server.");
+      setError(errMsg);
+      setMetrics([]);
+      setStageBreakdown([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadReports() {
-      try {
-        const res = await getReports();
-        if (res?.data?.metrics) {
-          setMetrics(res.data.metrics);
-        }
-        if (res?.data?.stageBreakdown) {
-          setStageBreakdown(res.data.stageBreakdown);
-        }
-      } catch (err) {
-        // Fallback to high-fidelity mock metrics
-      }
-    }
     loadReports();
   }, []);
 
@@ -40,61 +49,130 @@ export default function ReportsView() {
           <h2>Analytics & Financial Reports</h2>
           <p>Subscription revenue health, contract distribution, and financial forecasting.</p>
         </div>
+        <button
+          className="btn-secondary"
+          onClick={loadReports}
+          disabled={loading}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+        >
+          <RefreshCw size={14} className={loading ? "spin" : ""} />
+          Refresh
+        </button>
       </div>
 
-      <div className="kpi-grid">
-        {metrics.map((m, i) => (
-          <div key={i} className="kpi-card">
-            <div className="kpi-label">{m.label}</div>
-            <div className="kpi-value tabular-num">{m.value}</div>
-            <div className="kpi-footer">
-              <span className="status-badge status-active">{m.change}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card" style={{ marginTop: "1.5rem" }}>
-        <div className="card-header">
-          <div>
-            <h3>Subscription Portfolio Distribution</h3>
-            <p className="card-subtitle">Active contracts by lifecycle state</p>
-          </div>
+      {/* Real Error Notice Banner - No silent mock hiding errors */}
+      {error && (
+        <div
+          className="notice-banner"
+          style={{
+            backgroundColor: "var(--color-status-overdue-bg)",
+            borderColor: "var(--color-status-overdue-text)",
+            color: "var(--color-status-overdue-text)",
+            marginBottom: "1.5rem",
+            padding: "0.85rem 1.25rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--color-status-overdue-text)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </span>
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "inherit",
+              display: "flex",
+              alignItems: "center",
+            }}
+            onClick={() => setError(null)}
+          >
+            <X size={16} />
+          </button>
         </div>
+      )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", padding: "1rem 0" }}>
-          {stageBreakdown.map((s, i) => (
-            <div key={i}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem", fontSize: "0.9rem" }}>
-                <span>
-                  <strong>{s.stage}</strong> ({s.count} contracts)
-                </span>
-                <span className="tabular-num">
-                  <strong>{s.percentage}%</strong>
-                </span>
+      {loading ? (
+        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--color-text-secondary)" }}>
+          Loading reports and revenue analytics...
+        </div>
+      ) : metrics.length === 0 && stageBreakdown.length === 0 && !error ? (
+        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--color-text-secondary)" }}>
+          <div style={{ fontWeight: 600, fontSize: "1.1rem", marginBottom: "0.5rem", color: "var(--color-text-primary)" }}>
+            No Financial Data Available
+          </div>
+          <p style={{ margin: 0 }}>
+            Reports will populate once recurring subscriptions are activated and invoices are processed.
+          </p>
+        </div>
+      ) : (
+        <>
+          {metrics.length > 0 && (
+            <div className="kpi-grid">
+              {metrics.map((m, i) => (
+                <div key={i} className="kpi-card">
+                  <div className="kpi-label">{m.label}</div>
+                  <div className="kpi-value tabular-num">{m.value}</div>
+                  {m.change && (
+                    <div className="kpi-footer">
+                      <span className="status-badge status-active">{m.change}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {stageBreakdown.length > 0 && (
+            <div className="card" style={{ marginTop: "1.5rem" }}>
+              <div className="card-header">
+                <div>
+                  <h3>Subscription Portfolio Distribution</h3>
+                  <p className="card-subtitle">Active contracts by lifecycle state</p>
+                </div>
               </div>
-              <div
-                style={{
-                  width: "100%",
-                  height: "12px",
-                  backgroundColor: "var(--color-muted)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "6px",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${s.percentage}%`,
-                    height: "100%",
-                    backgroundColor: "var(--color-midnight-indigo)",
-                  }}
-                />
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", padding: "1rem 0" }}>
+                {stageBreakdown.map((s, i) => (
+                  <div key={i}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem", fontSize: "0.9rem" }}>
+                      <span>
+                        <strong>{s.stage}</strong> ({s.count} contracts)
+                      </span>
+                      <span className="tabular-num">
+                        <strong>{s.percentage}%</strong>
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "12px",
+                        backgroundColor: "var(--color-muted)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "6px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${s.percentage}%`,
+                          height: "100%",
+                          backgroundColor: "var(--color-midnight-indigo)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
