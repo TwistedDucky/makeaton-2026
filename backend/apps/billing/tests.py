@@ -26,6 +26,7 @@ class InvoiceModelTests(TestCase):
         self,
         subscription_id=100,
         period_start=None,
+        period_end=None,
         status=Invoice.Status.DRAFT,
         subtotal=Decimal("100.00"),
         discount_total=Decimal("0.00"),
@@ -36,9 +37,9 @@ class InvoiceModelTests(TestCase):
         due_date=None,
     ):
         start = period_start or date(2026, 1, 1)
-        end = date(2026, 1, 31)
-        iss = issue_date or date(2026, 1, 1)
-        due = due_date or date(2026, 2, 15)
+        end = period_end or (start + timedelta(days=30))
+        iss = issue_date or start
+        due = due_date or (iss + timedelta(days=15))
         return Invoice.objects.create(
             customer=self.customer,
             subscription_id=subscription_id,
@@ -104,7 +105,6 @@ class InvoiceModelTests(TestCase):
     # Guarded mark_paid() Tests
     # -------------------------------------------------------------------------
     def test_mark_paid_blocked_if_unpaid(self):
-        # Confirmed invoice but amount_paid is 0
         invoice = self._create_invoice(
             subscription_id=50,
             status=Invoice.Status.CONFIRMED,
@@ -118,7 +118,6 @@ class InvoiceModelTests(TestCase):
         self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
 
     def test_mark_paid_blocked_if_part_paid(self):
-        # Confirmed invoice but amount_paid is 50/100
         invoice = self._create_invoice(
             subscription_id=51,
             status=Invoice.Status.CONFIRMED,
@@ -147,7 +146,6 @@ class InvoiceModelTests(TestCase):
     # Guarded cancel() Tests
     # -------------------------------------------------------------------------
     def test_cancel_blocked_if_part_paid(self):
-        # Confirmed invoice with partial payment recorded cannot be cancelled
         invoice = self._create_invoice(
             subscription_id=60,
             status=Invoice.Status.CONFIRMED,
@@ -254,10 +252,27 @@ class InvoiceModelTests(TestCase):
                 self._create_invoice(subscription_id=74, amount_paid=Decimal("-10.00"))
 
     def test_db_constraint_amount_paid_lte_total(self):
-        # amount_paid 150 > total 100 must be rejected by CheckConstraint
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 self._create_invoice(subscription_id=75, total=Decimal("100.00"), amount_paid=Decimal("150.00"))
+
+    def test_db_constraint_due_date_gte_issue_date(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._create_invoice(
+                    subscription_id=76,
+                    issue_date=date(2026, 3, 15),
+                    due_date=date(2026, 3, 10),
+                )
+
+    def test_db_constraint_period_end_gte_period_start(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._create_invoice(
+                    subscription_id=77,
+                    period_start=date(2026, 3, 15),
+                    period_end=date(2026, 3, 10),
+                )
 
     # -------------------------------------------------------------------------
     # Database CheckConstraints on InvoiceLine
@@ -308,6 +323,32 @@ class InvoiceModelTests(TestCase):
                     tax_amount=Decimal("-2.00"),
                 )
 
+    def test_db_constraint_invoiceline_discount_lte_subtotal(self):
+        # Discount (15.00) exceeds line subtotal (1 * 10.00 = 10.00)
+        invoice = self._create_invoice(subscription_id=84)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InvoiceLine.objects.create(
+                    invoice=invoice,
+                    product_name="Over-discounted Line",
+                    quantity=1,
+                    unit_price=Decimal("10.00"),
+                    discount_amount=Decimal("15.00"),
+                )
+
+    def test_clean_validation_invoiceline_discount_lte_subtotal(self):
+        invoice = self._create_invoice(subscription_id=85)
+        line = InvoiceLine(
+            invoice=invoice,
+            product_name="Over-discounted Line",
+            quantity=2,
+            unit_price=Decimal("10.00"),  # subtotal = 20.00
+            discount_amount=Decimal("25.00"),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            line.clean()
+        self.assertIn("discount_amount", ctx.exception.message_dict)
+
     # -------------------------------------------------------------------------
     # Date Defaults & Validation
     # -------------------------------------------------------------------------
@@ -326,25 +367,56 @@ class InvoiceModelTests(TestCase):
         invoice = Invoice(
             customer=self.customer,
             subscription_id=91,
-            period_start=date(2026, 1, 1),
-            period_end=date(2026, 1, 31),
+            period_start=date(2026, 2, 1),
+            period_end=date(2026, 2, 28),
             issue_date=date(2026, 2, 10),
-            due_date=date(2026, 2, 5),  # 5 days before issue_date
+            due_date=date(2026, 2, 5),
             total=Decimal("50.00"),
         )
         with self.assertRaises(ValidationError) as ctx:
             invoice.full_clean()
         self.assertIn("due_date", ctx.exception.message_dict)
 
-    # -------------------------------------------------------------------------
-    # Constraint: Unique (subscription_id, period_start)
-    # -------------------------------------------------------------------------
-    def test_duplicate_subscription_period_start_rejected(self):
-        self._create_invoice(subscription_id=99, period_start=date(2026, 3, 1))
+    def test_period_end_preceding_period_start_raises_clean_validation_error(self):
+        invoice = Invoice(
+            customer=self.customer,
+            subscription_id=92,
+            period_start=date(2026, 2, 10),
+            period_end=date(2026, 2, 5),
+            issue_date=date(2026, 2, 1),
+            due_date=date(2026, 3, 1),
+            total=Decimal("50.00"),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            invoice.full_clean()
+        self.assertIn("period_end", ctx.exception.message_dict)
 
+    # -------------------------------------------------------------------------
+    # Conditional Unique Constraint: Cancelled invoices free their period
+    # -------------------------------------------------------------------------
+    def test_two_active_invoices_same_period_rejected(self):
+        self._create_invoice(subscription_id=99, period_start=date(2026, 3, 1), status=Invoice.Status.DRAFT)
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                self._create_invoice(subscription_id=99, period_start=date(2026, 3, 1))
+                self._create_invoice(subscription_id=99, period_start=date(2026, 3, 1), status=Invoice.Status.DRAFT)
+
+    def test_cancelled_invoice_frees_period_for_new_invoice(self):
+        inv1 = self._create_invoice(
+            subscription_id=99,
+            period_start=date(2026, 3, 1),
+            status=Invoice.Status.DRAFT,
+        )
+        inv1.cancel()
+        self.assertEqual(inv1.status, Invoice.Status.CANCELLED)
+
+        # Creating a new invoice for the same subscription and period_start now succeeds
+        inv2 = self._create_invoice(
+            subscription_id=99,
+            period_start=date(2026, 3, 1),
+            status=Invoice.Status.DRAFT,
+        )
+        self.assertNotEqual(inv1.id, inv2.id)
+        self.assertEqual(inv2.status, Invoice.Status.DRAFT)
 
     def test_different_subscription_same_period_allowed(self):
         inv1 = self._create_invoice(subscription_id=101, period_start=date(2026, 4, 1))
@@ -357,11 +429,11 @@ class InvoiceModelTests(TestCase):
         self.assertNotEqual(inv1.id, inv2.id)
 
     # -------------------------------------------------------------------------
-    # Invoice Line Formula & Rounding Edge Cases
+    # Invoice Line Formula, Rounding & Save Recomputation
     # -------------------------------------------------------------------------
     def test_invoice_line_canonical_formula_and_rounding_edge_case(self):
         """
-        Test canonical formula:
+        Canonical formula:
             line_subtotal = quantity * unit_price
             discounted_subtotal = line_subtotal - discount_amount
             line_total = discounted_subtotal + tax_amount
@@ -387,10 +459,35 @@ class InvoiceModelTests(TestCase):
         self.assertEqual(line.line_total, Decimal("98.99"))
         self.assertEqual(line.product_id, 42)
 
+    def test_invoice_line_recomputes_line_total_on_every_save(self):
+        invoice = self._create_invoice(subscription_id=301)
+        line = InvoiceLine.objects.create(
+            invoice=invoice,
+            product_name="Editable Line",
+            quantity=2,
+            unit_price=Decimal("50.00"),
+            discount_amount=Decimal("0.00"),
+            tax_amount=Decimal("0.00"),
+        )
+        # Initially: 2 x 50.00 = 100.00
+        self.assertEqual(line.line_total, Decimal("100.00"))
+
+        # Edit quantity and save
+        line.quantity = 3
+        line.save()
+        line.refresh_from_db()
+        self.assertEqual(line.line_total, Decimal("150.00"))
+
+        # Edit discount and save
+        line.discount_amount = Decimal("20.00")
+        line.save()
+        line.refresh_from_db()
+        self.assertEqual(line.line_total, Decimal("130.00"))
+
     # -------------------------------------------------------------------------
-    # Invoice.recalculate_totals() Tests
+    # Invoice.recalculate_totals() Tests & Draft-Only Guard
     # -------------------------------------------------------------------------
-    def test_recalculate_totals_aggregates_lines_without_altering_status_or_paid(self):
+    def test_recalculate_totals_aggregates_lines_on_draft(self):
         invoice = self._create_invoice(
             subscription_id=310,
             status=Invoice.Status.DRAFT,
@@ -400,7 +497,6 @@ class InvoiceModelTests(TestCase):
             tax_total=Decimal("0.00"),
             total=Decimal("0.00"),
         )
-        # Line 1: 2 x 50.00 = 100.00, discount 10.00, tax 9.00 -> line_total 99.00
         InvoiceLine.objects.create(
             invoice=invoice,
             product_name="Product A",
@@ -409,7 +505,6 @@ class InvoiceModelTests(TestCase):
             discount_amount=Decimal("10.00"),
             tax_amount=Decimal("9.00"),
         )
-        # Line 2: 1 x 30.00 = 30.00, discount 0.00, tax 3.00 -> line_total 33.00
         InvoiceLine.objects.create(
             invoice=invoice,
             product_name="Product B",
@@ -422,19 +517,26 @@ class InvoiceModelTests(TestCase):
         invoice.recalculate_totals()
         invoice.refresh_from_db()
 
-        # Expected:
-        # subtotal: 100.00 + 30.00 = 130.00
-        # discount_total: 10.00 + 0.00 = 10.00
-        # tax_total: 9.00 + 3.00 = 12.00
-        # total: 130.00 - 10.00 + 12.00 = 132.00
         self.assertEqual(invoice.subtotal, Decimal("130.00"))
         self.assertEqual(invoice.discount_total, Decimal("10.00"))
         self.assertEqual(invoice.tax_total, Decimal("12.00"))
         self.assertEqual(invoice.total, Decimal("132.00"))
-
-        # Preserved fields:
         self.assertEqual(invoice.status, Invoice.Status.DRAFT)
         self.assertEqual(invoice.amount_paid, Decimal("0.00"))
+
+    def test_recalculate_totals_raises_on_non_draft_invoice(self):
+        invoice = self._create_invoice(
+            subscription_id=311,
+            status=Invoice.Status.DRAFT,
+            total=Decimal("100.00"),
+            amount_paid=Decimal("0.00"),
+        )
+        invoice.confirm()
+        self.assertEqual(invoice.status, Invoice.Status.CONFIRMED)
+
+        with self.assertRaises(ValidationError) as ctx:
+            invoice.recalculate_totals()
+        self.assertIn("totals can only be recalculated on 'draft' invoices", str(ctx.exception))
 
 
 class InvoiceNumberConcurrencyTests(TransactionTestCase):
@@ -462,13 +564,13 @@ class InvoiceNumberConcurrencyTests(TransactionTestCase):
         def worker(thread_idx):
             from django.db import connection
             try:
-                # Synchronize all threads so they strike at the exact same instant
                 barrier.wait()
                 invoice = Invoice.objects.create(
                     customer=self.customer,
                     subscription_id=5000 + thread_idx,
                     period_start=date(2026, 7, 1),
                     period_end=date(2026, 7, 31),
+                    issue_date=date(2026, 7, 1),
                     due_date=date(2026, 8, 15),
                     total=Decimal("50.00"),
                 )
@@ -486,17 +588,12 @@ class InvoiceNumberConcurrencyTests(TransactionTestCase):
         for t in threads:
             t.join()
 
-        # Check that all worker threads completed without error
         self.assertEqual(errors, [], f"Encountered concurrency errors: {errors}")
         self.assertEqual(len(created_numbers), num_threads)
 
-        # Parse sequential suffix numbers
         seq_numbers = [int(num.split("-")[-1]) for num in created_numbers]
         sorted_seqs = sorted(seq_numbers)
 
-        # 1. Verify all numbers are unique
         self.assertEqual(len(set(created_numbers)), num_threads)
-
-        # 2. Verify no gaps in the sequence
         expected_seqs = list(range(sorted_seqs[0], sorted_seqs[0] + num_threads))
         self.assertEqual(sorted_seqs, expected_seqs, f"Expected contiguous sequence {expected_seqs}, got {sorted_seqs}")
