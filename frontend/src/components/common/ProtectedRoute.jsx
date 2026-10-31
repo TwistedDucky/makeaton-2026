@@ -11,6 +11,7 @@ import Spinner from "./Spinner";
  */
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
+  const userObj = user?.data || user;
 
   if (loading) {
     return (
@@ -20,7 +21,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     );
   }
 
-  if (!user) {
+  if (!userObj) {
     return (
       <div className="card" style={{ maxWidth: "460px", margin: "3rem auto", textAlign: "center", padding: "2.5rem" }}>
         <div className="brand-logo-mark" style={{ margin: "0 auto 1rem" }}>B</div>
@@ -32,15 +33,16 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     );
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  const role = userObj?.role;
+  if (allowedRoles && role && !allowedRoles.includes(role)) {
     return (
       <div className="card" style={{ maxWidth: "480px", margin: "3rem auto", textAlign: "center", padding: "2.5rem" }}>
         <h3>Access Restricted</h3>
         <p style={{ color: "var(--secondary-text)", fontSize: "0.9rem" }}>
-          Your current account role (<strong>{user.role}</strong>) is not permitted to view this module.
+          Your current account role (<strong>{role}</strong>) is not permitted to view this module.
         </p>
         <span className="role-badge role-customer" style={{ marginTop: "1rem" }}>
-          Current Role: {user.role}
+          Current Role: {role}
         </span>
       </div>
     );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { initializeCsrf, login, logout } from "./api/auth";
+import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
 import DashboardView from "./components/DashboardView";
 import CustomersView from "./components/CustomersView";
 import CatalogView from "./components/CatalogView";
@@ -22,27 +22,41 @@ function DashboardLayout() {
   const [globalSearch, setGlobalSearch] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
 
+  async function handleDemoLogin(email, password) {
+    try {
+      await initializeCsrf();
+      const res = await login(email, password);
+      const loggedUser = res?.data || res || { email, role: "STAFF" };
+      setUser(loggedUser);
+    } catch (err) {
+      console.error("Login failed", err);
+    }
+  }
+
   useEffect(() => {
     initializeCsrf()
       .then((data) => {
         if (data.success) {
           setBackendStatus("Online");
+          // If no user session is active, auto-login as sales rep for demo convenience
+          getCurrentUser()
+            .then((res) => {
+              const u = res?.data || res;
+              if (u && u.email) {
+                setUser(u);
+              } else {
+                handleDemoLogin("sales@example.com", "Staff123!");
+              }
+            })
+            .catch(() => {
+              handleDemoLogin("sales@example.com", "Staff123!");
+            });
         } else {
           setBackendStatus("CSRF Pending");
         }
       })
       .catch(() => setBackendStatus("Offline"));
   }, []);
-
-  async function handleDemoLogin(email, password) {
-    try {
-      await initializeCsrf();
-      const res = await login(email, password);
-      setUser(res.data || { email });
-    } catch (err) {
-      alert("Login failed: " + (err?.message || "Invalid credentials"));
-    }
-  }
 
   async function handleLogout() {
     try {
@@ -53,7 +67,8 @@ function DashboardLayout() {
     }
   }
 
-  const role = user?.role || "STAFF";
+  const userObj = user?.data || user;
+  const role = userObj?.role || "STAFF";
   const isCustomer = role === "CUSTOMER";
   const isAdmin = role === "ADMIN";
 
@@ -76,10 +91,16 @@ function DashboardLayout() {
         </div>
 
         <div className="sidebar-user-pill">
-          <span className="user-avatar">{user ? user.email[0].toUpperCase() : "S"}</span>
+          <span className="user-avatar">
+            {userObj?.email ? userObj.email[0].toUpperCase() : "S"}
+          </span>
           <div className="user-details">
-            <strong>{user ? user.email.split("@")[0] : "Demo Session"}</strong>
-            <span className={`role-badge role-${role.toLowerCase()}`}>{role}</span>
+            <strong>
+              {userObj?.email ? userObj.email.split("@")[0] : "Sales Staff"}
+            </strong>
+            <span className={`role-badge role-${(role || "staff").toLowerCase()}`}>
+              {role}
+            </span>
           </div>
         </div>
 

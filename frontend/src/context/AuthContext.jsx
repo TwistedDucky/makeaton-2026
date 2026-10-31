@@ -9,7 +9,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     getCurrentUser()
-      .then(setUser)
+      .then((res) => {
+        // Backend returns { success: true, data: { id, email, role } }
+        setUser(res?.data || res || null);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
