@@ -106,3 +106,23 @@ class SubscriptionStateMachineTests(TestCase):
         result = advance_next_billing_date(self.subscription.id)
         self.subscription.refresh_from_db()
         self.assertGreater(result["next_billing_date"], date(2026, 1, 1))
+
+    def test_renewal_extends_expiry_date(self):
+        transition_subscription(self.subscription, Subscription.Status.CONFIRMED)
+        transition_subscription(self.subscription, Subscription.Status.ACTIVE)
+        initial_expiry = self.subscription.expiry_date
+
+        from .services import renew_subscription
+        renewed = renew_subscription(self.subscription.id)
+        self.assertGreater(renewed.expiry_date, initial_expiry)
+
+    def test_renewal_fails_if_plan_not_renewable(self):
+        self.plan.renewable = False
+        self.plan.save()
+        transition_subscription(self.subscription, Subscription.Status.CONFIRMED)
+        transition_subscription(self.subscription, Subscription.Status.ACTIVE)
+
+        from .services import renew_subscription
+        with self.assertRaises(ValidationError):
+            renew_subscription(self.subscription.id)
+
