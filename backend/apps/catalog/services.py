@@ -1,9 +1,9 @@
 """Catalog pricing and discount calculation services.
 
-Note for the billing app:
-All functions in this module are read-only and never mutate database records
-or increment Discount.used_count. When an invoice is finalized or paid, the
-billing app must increment discount usage inside its own transaction.atomic() using:
+Pricing calculations (price_invoice, calculate_tax, apply_discounts) are pure
+and read-only. When an invoice is finalized or paid, discount usage can be
+recorded atomically using `record_discount_usage(discount_id, invoice_id, subscription_id)`.
+Alternatively, the billing app may perform its own guarded update inside its transaction:
 
     updated = Discount.objects.filter(
         pk=id,
@@ -17,7 +17,10 @@ from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
-from .models import Discount, Tax
+from django.db import IntegrityError, transaction
+from django.db.models import F, Q
+
+from .models import Discount, DiscountUsage, Tax
 from .selectors import (
     active_discounts_on,
     get_active_product,
@@ -328,3 +331,54 @@ def price_invoice(lines: list[Line], billing_date: date) -> PricedInvoice:
         total=total,
     )
 
+
+@transaction.atomic
+def record_discount_usage(
+    discount_id: int,
+    invoice_id: int,
+    subscription_id: int | None = None,
+) -> bool:
+    """
+    Record usage of a discount for an invoice and subscription idempotently.
+
+    - If a DiscountUsage for (discount_id, invoice_id) already exists, returns True.
+    - Otherwise runs the guarded increment on Discount.used_count.
+    - If 0 rows updated, returns False and creates nothing.
+    - Otherwise creates DiscountUsage and returns True.
+    - Handles concurrent duplicate (IntegrityError on unique(discount, invoice_id))
+      inside a savepoint so the increment rolls back and returns True.
+    """
+    if DiscountUsage.objects.filter(
+        discount_id=discount_id, invoice_id=invoice_id
+    ).exists():
+        return True
+
+    usage_limit_field = Discount._meta.get_field("usage_limit")
+    filter_q = Q(pk=discount_id, is_active=True)
+    if usage_limit_field.null:
+        filter_q &= Q(usage_limit__isnull=True) | Q(used_count__lt=F("usage_limit"))
+    else:
+        filter_q &= Q(used_count__lt=F("usage_limit"))
+
+    usage_kwargs = {
+        "discount_id": discount_id,
+        "invoice_id": invoice_id,
+    }
+    sub_field = DiscountUsage._meta.get_field("subscription_id")
+    if subscription_id is None and not sub_field.null:
+        usage_kwargs["subscription_id"] = 0
+    else:
+        usage_kwargs["subscription_id"] = subscription_id
+
+    try:
+        with transaction.atomic():
+            updated = Discount.objects.filter(filter_q).update(
+                used_count=F("used_count") + 1
+            )
+            if updated == 0:
+                return False
+
+            DiscountUsage.objects.create(**usage_kwargs)
+            return True
+    except IntegrityError:
+        return True
