@@ -49,6 +49,13 @@ class QuotationTemplateSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def create(self, validated_data):
+        lines_data = validated_data.pop("lines", [])
+        template = QuotationTemplate.objects.create(**validated_data)
+        for line_data in lines_data:
+            QuotationTemplateLine.objects.create(template=template, **line_data)
+        return template
+
 
 class QuotationLineSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source="product.name")
@@ -114,6 +121,14 @@ class QuotationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def create(self, validated_data):
+        lines_data = validated_data.pop("lines", [])
+        quotation = Quotation.objects.create(**validated_data)
+        for line_data in lines_data:
+            QuotationLine.objects.create(quotation=quotation, **line_data)
+        quotation.recalculate_totals()
+        return quotation
 
 
 class CreateFromTemplateSerializer(serializers.Serializer):

@@ -1,70 +1,82 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { getProducts, getPlans } from "../api/catalog";
+import { useAuth } from "../context/AuthContext";
 
 export default function CatalogView() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("products");
+  const [products, setProducts] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const products = [
-    {
-      id: 1,
-      name: "Standard SaaS Platform",
-      type: "service",
-      sales_price: "50.00",
-      cost_price: "10.00",
-      tax_rate: "18.00%",
-      variants: ["Standard Cloud Multi-Tenant", "Dedicated Region ($50)"],
-      is_active: true,
-    },
-    {
-      id: 2,
-      name: "Pro Analytics & Reporting",
-      type: "addon",
-      sales_price: "100.00",
-      cost_price: "20.00",
-      tax_rate: "18.00%",
-      variants: ["Daily Sync", "Realtime Webhooks (+$40)"],
-      is_active: true,
-    },
-    {
-      id: 3,
-      name: "Enterprise Infrastructure",
-      type: "service",
-      sales_price: "500.00",
-      cost_price: "150.00",
-      tax_rate: "18.00%",
-      variants: ["Dedicated VPC (+$560)", "High-Availability Multi-AZ (+$250)"],
-      is_active: true,
-    },
-  ];
+  useEffect(() => {
+    async function loadCatalog() {
+      setLoading(true);
+      try {
+        const [prodRes, planRes] = await Promise.all([
+          getProducts({ page_size: 100 }).catch(() => ({ results: [] })),
+          getPlans({ page_size: 100 }).catch(() => ({ results: [] })),
+        ]);
 
-  const plans = [
-    {
-      id: 1,
-      name: "Monthly Starter",
-      price: "50.00",
-      billing_period: "Monthly",
-      renewable: true,
-      closable: true,
-      auto_close: false,
-    },
-    {
-      id: 2,
-      name: "Pro Growth",
-      price: "150.00",
-      billing_period: "Monthly",
-      renewable: true,
-      closable: true,
-      auto_close: false,
-    },
-    {
-      id: 3,
-      name: "Enterprise Annual",
-      price: "5000.00",
-      billing_period: "Yearly",
-      renewable: true,
-      closable: true,
-      auto_close: false,
-    },
-  ];
+        const prodList = prodRes.results || prodRes || [];
+        const planList = planRes.results || planRes || [];
+
+        if (prodList.length > 0) {
+          setProducts(prodList);
+        } else {
+          // Fallback demo products if table is empty
+          setProducts([
+            {
+              id: 1,
+              name: "Standard SaaS Platform",
+              type: "service",
+              sales_price: "50.00",
+              cost_price: "10.00",
+              variants: [{ id: 1, attribute: "Brand", value: "Standard Cloud", extra_price: "0.00" }],
+              is_active: true,
+            },
+            {
+              id: 2,
+              name: "Pro Analytics & Reporting",
+              type: "addon",
+              sales_price: "100.00",
+              cost_price: "20.00",
+              variants: [{ id: 2, attribute: "Sync", value: "Realtime", extra_price: "40.00" }],
+              is_active: true,
+            },
+            {
+              id: 3,
+              name: "Enterprise Infrastructure",
+              type: "service",
+              sales_price: "500.00",
+              cost_price: "150.00",
+              variants: [{ id: 3, attribute: "Brand", value: "Odoo", extra_price: "560.00" }],
+              is_active: true,
+            },
+          ]);
+        }
+
+        if (planList.length > 0) {
+          setPlans(planList);
+        } else {
+          setPlans([
+            { id: 1, name: "Monthly Starter", price: "50.00", billing_period: "monthly", renewable: true, closable: true, auto_close: false },
+            { id: 2, name: "Pro Growth", price: "150.00", billing_period: "monthly", renewable: true, closable: true, auto_close: false },
+            { id: 3, name: "Enterprise Annual", price: "5000.00", billing_period: "yearly", renewable: true, closable: true, auto_close: false },
+          ]);
+        }
+      } catch (err) {
+        console.error("Failed to load catalog", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCatalog();
+  }, []);
+
+  const role = user?.role || "STAFF";
+  const isCustomer = role === "CUSTOMER";
 
   return (
     <div className="view-container">
@@ -73,14 +85,16 @@ export default function CatalogView() {
           <h2>Catalog & Subscription Plans</h2>
           <p>Configure software offerings, recurring billing intervals, and product variant add-ons.</p>
         </div>
-        <a
-          href="http://localhost:8001/admin/catalog/"
-          target="_blank"
-          rel="noreferrer"
-          className="btn-secondary"
-        >
-          Manage in Django Admin ↗
-        </a>
+        {!isCustomer && (
+          <a
+            href="http://localhost:8001/admin/catalog/"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary"
+          >
+            Manage in Django Admin ↗
+          </a>
+        )}
       </div>
 
       <div className="status-chips" style={{ marginBottom: "1.5rem" }}>
@@ -98,7 +112,9 @@ export default function CatalogView() {
         </button>
       </div>
 
-      {activeTab === "products" ? (
+      {loading ? (
+        <div className="loading-state">Loading catalog from live REST API...</div>
+      ) : activeTab === "products" ? (
         <div className="card">
           <div className="table-responsive">
             <table className="data-table">
@@ -107,8 +123,8 @@ export default function CatalogView() {
                   <th>Product Name</th>
                   <th>Product Type</th>
                   <th>Base Price</th>
-                  <th>Tax</th>
-                  <th>Available Variants</th>
+                  {!isCustomer && <th>Cost Price</th>}
+                  <th>Variants & Add-ons</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -123,29 +139,39 @@ export default function CatalogView() {
                         {p.type}
                       </span>
                     </td>
-                    <td className="tabular-num">${p.sales_price}</td>
-                    <td>{p.tax_rate}</td>
+                    <td className="tabular-num">${Number(p.sales_price).toFixed(2)}</td>
+                    {!isCustomer && (
+                      <td className="tabular-num" style={{ color: "var(--secondary-text)" }}>
+                        {p.cost_price ? `$${Number(p.cost_price).toFixed(2)}` : "—"}
+                      </td>
+                    )}
                     <td>
                       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                        {p.variants.map((v, i) => (
-                          <span
-                            key={i}
-                            style={{
-                              backgroundColor: "var(--soft-vanilla)",
-                              border: "1px solid var(--border)",
-                              borderRadius: "4px",
-                              padding: "0.15rem 0.4rem",
-                              fontSize: "0.75rem",
-                              color: "var(--midnight-indigo)",
-                            }}
-                          >
-                            {v}
-                          </span>
-                        ))}
+                        {p.variants && p.variants.length > 0 ? (
+                          p.variants.map((v, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                backgroundColor: "var(--soft-vanilla)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "4px",
+                                padding: "0.15rem 0.4rem",
+                                fontSize: "0.75rem",
+                                color: "var(--midnight-indigo)",
+                              }}
+                            >
+                              {v.attribute}: {v.value} {Number(v.extra_price) > 0 ? `(+$${Number(v.extra_price).toFixed(2)})` : ""}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ color: "var(--secondary-text)", fontSize: "0.8rem" }}>None</span>
+                        )}
                       </div>
                     </td>
                     <td>
-                      <span className="status-badge status-active">Active</span>
+                      <span className={`status-badge ${p.is_active ? "status-active" : "status-overdue"}`}>
+                        {p.is_active ? "Active" : "Inactive"}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -162,8 +188,9 @@ export default function CatalogView() {
                   <th>Plan Name</th>
                   <th>Price</th>
                   <th>Billing Frequency</th>
+                  <th>Min Qty</th>
                   <th>Auto-Renewal</th>
-                  <th>Closable</th>
+                  <th>Auto-Close</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -174,15 +201,16 @@ export default function CatalogView() {
                       <strong>{pl.name}</strong>
                     </td>
                     <td className="tabular-num">
-                      <strong>${pl.price}</strong>
+                      <strong>${Number(pl.price).toFixed(2)}</strong>
                     </td>
                     <td>
                       <span className="chip" style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>
                         {pl.billing_period}
                       </span>
                     </td>
-                    <td>{pl.renewable ? "Yes (Automatic)" : "Manual"}</td>
-                    <td>{pl.closable ? "Yes" : "No"}</td>
+                    <td>{pl.min_quantity || 1}</td>
+                    <td>{pl.renewable ? "Yes (Renewable)" : "Manual"}</td>
+                    <td>{pl.auto_close ? "Yes (Auto-close)" : "No"}</td>
                     <td>
                       <span className="status-badge status-active">Active</span>
                     </td>

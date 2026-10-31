@@ -16,6 +16,13 @@ export async function createQuotationFromTemplate(data) {
     });
 }
 
+export async function createCustomQuotation(data) {
+    return apiRequest("/sales/quotations/", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+}
+
 export async function sendQuotation(id) {
     return apiRequest(`/sales/quotations/${id}/send/`, {
         method: "POST",

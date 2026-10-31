@@ -21,3 +21,17 @@ export async function deleteProduct(id) {
   return apiRequest(`/catalog/products/${id}/`, { method: "DELETE" });
 }
 
+export async function getPlans(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return apiRequest(`/catalog/plans/${query ? "?" + query : ""}`);
+}
+
+export async function getTaxes(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return apiRequest(`/catalog/taxes/${query ? "?" + query : ""}`);
+}
+
+export async function getDiscounts(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return apiRequest(`/catalog/discounts/${query ? "?" + query : ""}`);
+}

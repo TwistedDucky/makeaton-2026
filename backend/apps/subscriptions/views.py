@@ -15,6 +15,7 @@ from .services import (
     advance_next_billing_date,
     get_due_subscriptions,
     transition_subscription,
+    renew_subscription,
 )
 from common.pagination import StandardPagination
 from common.permissions import IsStaffOrAdmin
@@ -89,3 +90,13 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         subscription = self.get_object()
         result = advance_next_billing_date(subscription.id)
         return Response({"success": True, "data": result})
+
+    @action(detail=True, methods=["post"], url_path="renew")
+    def renew(self, request, pk=None):
+        """Extends contract period by 1 cycle if plan is renewable."""
+        try:
+            renewed = renew_subscription(pk)
+            return Response(SubscriptionSerializer(renewed).data)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
