@@ -20,3 +20,25 @@ export async function logout() {
 export async function getCurrentUser() {
     return apiRequest("/auth/me/");
 }
+
+export async function register(data) {
+    // data: { email, first_name, last_name, phone_number, password }
+    return apiRequest("/auth/register/", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+}
+
+export async function requestPasswordReset(email) {
+    return apiRequest("/auth/password-reset/", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+    });
+}
+
+export async function confirmPasswordReset(uid, token, new_password) {
+    return apiRequest("/auth/password-reset/confirm/", {
+        method: "POST",
+        body: JSON.stringify({ uid, token, new_password }),
+    });
+}

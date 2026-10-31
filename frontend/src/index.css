@@ -1,111 +1,91 @@
+@import "./tokens.css";
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* Aliases for backwards compatibility with token names */
+  --vanilla: var(--color-vanilla);
+  --midnight-indigo: var(--color-midnight-indigo);
+  --white: var(--color-surface);
+  --soft-vanilla: var(--color-muted);
+  --muted-beige: var(--color-muted);
+  --border: var(--color-border);
+  --secondary-text: var(--color-text-secondary);
+  --text-main: var(--color-text-primary);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Status Colors */
+  --status-active-bg: var(--color-status-active-bg);
+  --status-active-text: var(--color-status-active-text);
+  --status-pending-bg: var(--color-status-pending-bg);
+  --status-pending-text: var(--color-status-pending-text);
+  --status-overdue-bg: var(--color-status-overdue-bg);
+  --status-overdue-text: var(--color-status-overdue-text);
+  --status-cancelled-bg: var(--color-muted);
+  --status-cancelled-text: var(--color-text-secondary);
+  --status-confirmed-bg: #DBEAFE;
+  --status-confirmed-text: #1E40AF;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --font-sans: var(--font-family-base);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
+/* ─── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
+  font-family: var(--font-family-base);
+  background-color: var(--color-vanilla);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+  width: 100%;
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-h1);
+  line-height: var(--line-height-h1);
+  color: var(--color-midnight-indigo);
+  margin-top: 0;
 }
+
 h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-h2);
+  line-height: var(--line-height-h2);
+  color: var(--color-midnight-indigo);
+  margin-top: 0;
 }
+
+h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-h3);
+  line-height: var(--line-height-h3);
+  color: var(--color-midnight-indigo);
+  margin-top: 0;
+}
+
 p {
-  margin: 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+  margin-top: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+button {
+  font-family: var(--font-family-base);
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* ─── Additional aliases (for auth pages) ─────────────────────────────── */
+:root {
+  --color-indigo:       var(--color-midnight-indigo);
+  --color-indigo-hover: #1e2038;
+  --color-vanilla:      #EEEBDA;
+  --color-soft-vanilla: var(--color-muted);
+  --color-muted-beige:  var(--color-muted);
+  --color-bl-border:    var(--color-border);
+  --color-text-muted:   var(--color-text-secondary);
+  --radius-card:        var(--radius-md);
 }
