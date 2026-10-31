@@ -1,36 +1,52 @@
-import { Navigate, useLocation } from "react-router-dom";
+import React from "react";
 import { useAuth } from "../../context/AuthContext";
+import Spinner from "./Spinner";
 
 /**
- * Wraps any route that requires authentication (and optionally a specific role).
+ * ProtectedRoute component:
+ * Guards children based on authentication and optional role restrictions.
  *
- * Usage:
- *   <ProtectedRoute>                          — any logged-in user
- *   <ProtectedRoute roles={["ADMIN"]}         — admin only
- *   <ProtectedRoute roles={["ADMIN","STAFF"]} — admin or staff
+ * @param {React.ReactNode} children - The component(s) to render if permitted.
+ * @param {string[]} [allowedRoles] - Optional list of permitted roles (e.g. ['ADMIN', 'STAFF']).
  */
-export default function ProtectedRoute({ children, roles }) {
-    const { user, loading } = useAuth();
-    const location = useLocation();
+export default function ProtectedRoute({ children, allowedRoles }) {
+  const { user, loading } = useAuth();
+  const userObj = user?.data || user;
 
-    // Still hydrating session from cookie — show nothing (avoids flash)
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-[#EEEBDA] flex items-center justify-center">
-                <span className="w-8 h-8 border-2 border-[#282B4A]/20 border-t-[#282B4A] rounded-full animate-spin" />
-            </div>
-        );
-    }
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "40vh" }}>
+        <Spinner />
+      </div>
+    );
+  }
 
-    // Not logged in — redirect to login and remember where they came from
-    if (!user) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
-    }
+  if (!userObj) {
+    return (
+      <div className="card" style={{ maxWidth: "460px", margin: "3rem auto", textAlign: "center", padding: "2.5rem" }}>
+        <div className="brand-logo-mark" style={{ margin: "0 auto 1rem" }}>B</div>
+        <h3>Sign In to Brightloop</h3>
+        <p style={{ color: "var(--secondary-text)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+          This page requires an authenticated session. Use the <strong>Role Switcher</strong> in the top navigation bar to authenticate as Staff, Customer, or Admin.
+        </p>
+      </div>
+    );
+  }
 
-    // Logged in but wrong role
-    if (roles && !roles.includes(user.role)) {
-        return <Navigate to="/unauthorized" replace />;
-    }
+  const role = userObj?.role;
+  if (allowedRoles && role && !allowedRoles.includes(role)) {
+    return (
+      <div className="card" style={{ maxWidth: "480px", margin: "3rem auto", textAlign: "center", padding: "2.5rem" }}>
+        <h3>Access Restricted</h3>
+        <p style={{ color: "var(--secondary-text)", fontSize: "0.9rem" }}>
+          Your current account role (<strong>{role}</strong>) is not permitted to view this module.
+        </p>
+        <span className="role-badge role-customer" style={{ marginTop: "1rem" }}>
+          Current Role: {role}
+        </span>
+      </div>
+    );
+  }
 
-    return children;
+  return children;
 }

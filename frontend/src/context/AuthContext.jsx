@@ -10,13 +10,14 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
     const [user, setUser]       = useState(null);
-    const [loading, setLoading] = useState(true);  // true while hydrating from session
+    const [loading, setLoading] = useState(true);
 
     // On mount — restore session if cookie is still alive
+    // Uses res?.data || res to handle both response shapes
     useEffect(() => {
         initializeCsrf()
             .then(() => getCurrentUser())
-            .then((res) => setUser(res.data))
+            .then((res) => setUser(res?.data || res || null))
             .catch(() => setUser(null))
             .finally(() => setLoading(false));
     }, []);
@@ -25,8 +26,9 @@ export function AuthProvider({ children }) {
     const login = useCallback(async (email, password) => {
         await initializeCsrf();
         const res = await apiLogin(email, password);
-        setUser(res.data);
-        return res.data;
+        const userData = res?.data || res;
+        setUser(userData);
+        return userData;
     }, []);
 
     // logout() → clears session and user state
@@ -38,15 +40,17 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
+    const resolvedUser = user?.data || user;
+
     const value = {
         user,
         setUser,
         loading,
         login,
         logout,
-        isAdmin:    user?.role === "ADMIN",
-        isStaff:    user?.role === "STAFF",
-        isCustomer: user?.role === "CUSTOMER",
+        isAdmin:    resolvedUser?.role === "ADMIN",
+        isStaff:    resolvedUser?.role === "STAFF",
+        isCustomer: resolvedUser?.role === "CUSTOMER",
     };
 
     return (
