@@ -81,7 +81,7 @@ export default function DashboardView({ onNavigate }) {
         <div className="kpi-card">
           <div className="kpi-label">Monthly Recurring Revenue</div>
           <div className="kpi-value tabular-num">
-            {loading ? "..." : `$${stats.mrr.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+            {loading ? "..." : `₹${stats.mrr.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
           </div>
           <div className="kpi-footer">
             <span className="kpi-subtext">Across active plans</span>
@@ -113,7 +113,7 @@ export default function DashboardView({ onNavigate }) {
             <p className="card-subtitle">Latest customer contract states</p>
           </div>
           <button className="btn-secondary" onClick={() => onNavigate("subscriptions")}>
-            View All ➔
+            View all
           </button>
         </div>
 
@@ -157,7 +157,7 @@ export default function DashboardView({ onNavigate }) {
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }} className="tabular-num">
-                      <strong>${Number(sub.total_amount).toFixed(2)}</strong>
+                      <strong>₹{Number(sub.total_amount).toFixed(2)}</strong>
                     </td>
                   </tr>
                 ))

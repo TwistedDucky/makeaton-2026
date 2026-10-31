@@ -92,7 +92,7 @@ export default function CatalogView() {
             rel="noreferrer"
             className="btn-secondary"
           >
-            Manage in Django Admin ↗
+            Manage in Django Admin
           </a>
         )}
       </div>
@@ -139,10 +139,10 @@ export default function CatalogView() {
                         {p.type}
                       </span>
                     </td>
-                    <td className="tabular-num">${Number(p.sales_price).toFixed(2)}</td>
+                    <td className="tabular-num">₹{Number(p.sales_price).toFixed(2)}</td>
                     {!isCustomer && (
                       <td className="tabular-num" style={{ color: "var(--secondary-text)" }}>
-                        {p.cost_price ? `$${Number(p.cost_price).toFixed(2)}` : "—"}
+                        {p.cost_price ? `₹${Number(p.cost_price).toFixed(2)}` : "—"}
                       </td>
                     )}
                     <td>
@@ -160,7 +160,7 @@ export default function CatalogView() {
                                 color: "var(--midnight-indigo)",
                               }}
                             >
-                              {v.attribute}: {v.value} {Number(v.extra_price) > 0 ? `(+$${Number(v.extra_price).toFixed(2)})` : ""}
+                              {v.attribute}: {v.value} {Number(v.extra_price) > 0 ? `(+₹${Number(v.extra_price).toFixed(2)})` : ""}
                             </span>
                           ))
                         ) : (
@@ -201,7 +201,7 @@ export default function CatalogView() {
                       <strong>{pl.name}</strong>
                     </td>
                     <td className="tabular-num">
-                      <strong>${Number(pl.price).toFixed(2)}</strong>
+                      <strong>₹{Number(pl.price).toFixed(2)}</strong>
                     </td>
                     <td>
                       <span className="chip" style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}>

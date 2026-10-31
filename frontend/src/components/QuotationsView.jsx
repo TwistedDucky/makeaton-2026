@@ -235,7 +235,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
               className="btn-secondary"
               style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
             >
-              Manage in Admin ↗
+              Manage in Admin
             </a>
           </div>
 
@@ -256,7 +256,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                     <span>Lines: {tmpl.lines?.length || 0} items</span>
                   </div>
                   <button className="btn-primary" onClick={() => setSelectedTemplate(tmpl)}>
-                    Generate Quote from Template ➔
+                    Generate quote from template
                   </button>
                 </div>
               ))}
@@ -273,7 +273,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
             <p className="card-subtitle">
               {isCustomer
                 ? "Click 'Review & Sign' to inspect proposal lines and activate your contract"
-                : "Manage proposal lifecycles: Draft ➔ Sent ➔ Accepted ➔ Converted"}
+                : "Manage proposal lifecycles: Draft to Sent to Accepted to Converted"}
             </p>
           </div>
         </div>
@@ -328,7 +328,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }} className="tabular-num">
-                      <strong>${Number(q.total_amount).toFixed(2)}</strong>
+                      <strong>₹{Number(q.total_amount).toFixed(2)}</strong>
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: "0.4rem" }}>
@@ -337,7 +337,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                           style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
                           onClick={() => setPreviewQuote(q)}
                         >
-                          View 📄
+                          View
                         </button>
 
                         {/* Customer Actions */}
@@ -348,7 +348,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                               style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
                               onClick={() => handleAccept(q.id)}
                             >
-                              Accept & Sign ✔️
+                              Accept and sign
                             </button>
                             <button
                               className="btn-danger"
@@ -369,7 +369,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                                 style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
                                 onClick={() => handleSend(q.id)}
                               >
-                                Send ✉️
+                                Send
                               </button>
                             )}
 
@@ -379,7 +379,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                                 style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
                                 onClick={() => handleAccept(q.id)}
                               >
-                                Accept ✔️
+                                Accept
                               </button>
                             )}
 
@@ -389,7 +389,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                                 style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
                                 onClick={() => handleConvert(q.id)}
                               >
-                                Convert to Sub ➔
+                                Convert to subscription
                               </button>
                             )}
                           </>
@@ -475,7 +475,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting ? "Generating..." : "Create Quotation ➔"}
+                  {submitting ? "Generating..." : "Create quotation"}
                 </button>
               </div>
             </form>
@@ -539,9 +539,9 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                         marginTop: "0.3rem",
                       }}
                     >
-                      <option value="1">Monthly Starter ($50/mo)</option>
-                      <option value="2">Pro Growth ($150/mo)</option>
-                      <option value="3">Enterprise Annual ($5000/yr)</option>
+                      <option value="1">Monthly Starter (₹50/mo)</option>
+                      <option value="2">Pro Growth (₹150/mo)</option>
+                      <option value="3">Enterprise Annual (₹5,000/yr)</option>
                     </select>
                   </div>
                 </div>
@@ -612,8 +612,8 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                       <tr>
                         <th>Product</th>
                         <th style={{ width: "70px" }}>Qty</th>
-                        <th style={{ width: "90px" }}>Price ($)</th>
-                        <th style={{ width: "80px" }}>Tax ($)</th>
+                        <th style={{ width: "90px" }}>Price (₹)</th>
+                        <th style={{ width: "80px" }}>Tax (₹)</th>
                         <th style={{ width: "40px" }}></th>
                       </tr>
                     </thead>
@@ -703,7 +703,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting ? "Saving..." : "Create Quotation ➔"}
+                  {submitting ? "Saving..." : "Create quotation"}
                 </button>
               </div>
             </form>
@@ -769,10 +769,10 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                         </td>
                         <td style={{ textAlign: "center" }}>{l.quantity}</td>
                         <td style={{ textAlign: "right" }} className="tabular-num">
-                          ${l.unit_price}
+                          ₹{l.unit_price}
                         </td>
                         <td style={{ textAlign: "right" }} className="tabular-num">
-                          ${l.amount}
+                          ₹{l.amount}
                         </td>
                       </tr>
                     ))
@@ -801,15 +801,15 @@ export default function QuotationsView({ onConvertedToSubscription }) {
             >
               <div>
                 <span style={{ color: "var(--secondary-text)" }}>Subtotal: </span>
-                <span className="tabular-num">${previewQuote.subtotal}</span>
+                <span className="tabular-num">₹{previewQuote.subtotal}</span>
               </div>
               <div>
-                <span style={{ color: "var(--secondary-text)" }}>Taxes (18% VAT): </span>
-                <span className="tabular-num">${previewQuote.tax_amount}</span>
+                <span style={{ color: "var(--secondary-text)" }}>Taxes (18% GST): </span>
+                <span className="tabular-num">₹{previewQuote.tax_amount}</span>
               </div>
               <div style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--midnight-indigo)" }}>
                 <span>Total Quotation Value: </span>
-                <span className="tabular-num">${previewQuote.total_amount}</span>
+                <span className="tabular-num">₹{previewQuote.total_amount}</span>
               </div>
             </div>
 
@@ -825,7 +825,7 @@ export default function QuotationsView({ onConvertedToSubscription }) {
                     setPreviewQuote(null);
                   }}
                 >
-                  Accept & Sign This Quote ➔
+                  Accept and sign quote
                 </button>
               )}
             </div>

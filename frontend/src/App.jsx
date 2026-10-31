@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { initializeCsrf, login, logout, getCurrentUser } from "./api/auth";
-import LoginPage from "./pages/auth/LoginPage";
-import RegisterPage from "./pages/auth/RegisterPage";
 import DashboardView from "./components/DashboardView";
 import CustomersView from "./components/CustomersView";
 import CatalogView from "./components/CatalogView";
@@ -16,14 +14,19 @@ import ReportsView from "./components/ReportsView";
 import SettingsView from "./components/SettingsView";
 import Member4BillingSimulator from "./components/Member4BillingSimulator";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+
+// Auth pages from Member 1
+import LoginPage from "./pages/auth/LoginPage";
+import RegisterPage from "./pages/auth/RegisterPage";
+import UnauthorizedPage from "./pages/UnauthorizedPage";
+
 import "./App.css";
 
-function DashboardLayout() {
+export function DashboardLayout() {
   const { user, setUser } = useAuth();
   const [currentModule, setCurrentModule] = useState("dashboard");
   const [backendStatus, setBackendStatus] = useState("Connecting...");
   const [globalSearch, setGlobalSearch] = useState("");
-  const [showNotifications, setShowNotifications] = useState(false);
 
   async function handleDemoLogin(email, password) {
     try {
@@ -41,7 +44,7 @@ function DashboardLayout() {
       .then((data) => {
         if (data.success) {
           setBackendStatus("Online");
-          // If no user session is active, auto-login as sales rep for demo convenience
+          // Auto-login as sales rep for demo convenience if no session
           getCurrentUser()
             .then((res) => {
               const u = res?.data || res;
@@ -75,12 +78,6 @@ function DashboardLayout() {
   const isCustomer = role === "CUSTOMER";
   const isAdmin = role === "ADMIN";
 
-  const notifications = [
-    { id: 1, title: "Quotation Accepted", desc: "Acme Corp approved Q-1001 ($208.86)", time: "10m ago" },
-    { id: 2, title: "Contract Billing Due", desc: "SUB-2026-0001 ready for invoice cycle", time: "1h ago" },
-    { id: 3, title: "Payment Recorded", desc: "Stark Industries paid INV-2026-0002 ($1,475.00)", time: "3h ago" },
-  ];
-
   return (
     <div className="brightloop-app">
       {/* 1. Midnight Indigo Sidebar */}
@@ -108,8 +105,6 @@ function DashboardLayout() {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-label">OVERVIEW</div>
-
           <button
             className={`nav-item ${currentModule === "dashboard" ? "active" : ""}`}
             onClick={() => setCurrentModule("dashboard")}
@@ -127,8 +122,6 @@ function DashboardLayout() {
               <span>Customers</span>
             </button>
           )}
-
-          <div className="nav-section-label">{isCustomer ? "MY PORTAL" : "SALES & CONTRACTS"}</div>
 
           {!isCustomer && (
             <button
@@ -150,8 +143,6 @@ function DashboardLayout() {
 
           {!isCustomer && (
             <>
-              <div className="nav-section-label">CATALOG & PRICING</div>
-
               <button
                 className={`nav-item ${currentModule === "catalog" ? "active" : ""}`}
                 onClick={() => setCurrentModule("catalog")}
@@ -169,8 +160,6 @@ function DashboardLayout() {
               </button>
             </>
           )}
-
-          <div className="nav-section-label">FINANCE & BILLING</div>
 
           <button
             className={`nav-item ${currentModule === "invoices" ? "active" : ""}`}
@@ -199,17 +188,13 @@ function DashboardLayout() {
           )}
 
           {!isCustomer && (
-            <>
-              <div className="nav-section-label">MANAGEMENT</div>
-
-              <button
-                className={`nav-item ${currentModule === "reports" ? "active" : ""}`}
-                onClick={() => setCurrentModule("reports")}
-              >
-                <span className="nav-icon">📈</span>
-                <span>Reports</span>
-              </button>
-            </>
+            <button
+              className={`nav-item ${currentModule === "reports" ? "active" : ""}`}
+              onClick={() => setCurrentModule("reports")}
+            >
+              <span className="nav-icon">📈</span>
+              <span>Reports</span>
+            </button>
           )}
 
           <button
@@ -255,102 +240,31 @@ function DashboardLayout() {
           </div>
 
           <div className="topbar-right">
-            {/* Notification Bell */}
-            <div style={{ position: "relative" }}>
+            <div className="role-select-box">
+              <span>Role:</span>
+              <select
+                value={role}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "STAFF") handleDemoLogin("sales@example.com", "Staff123!");
+                  else if (val === "CUSTOMER") handleDemoLogin("acme@corp.com", "Customer123!");
+                  else if (val === "ADMIN") handleDemoLogin("admin@example.com", "Admin123!");
+                }}
+              >
+                <option value="STAFF">Staff (Sales)</option>
+                <option value="CUSTOMER">Customer (Acme)</option>
+                <option value="ADMIN">Administrator</option>
+              </select>
+            </div>
+            {user && (
               <button
                 className="btn-secondary"
-                style={{ padding: "0.45rem 0.75rem", borderRadius: "8px", position: "relative" }}
-                onClick={() => setShowNotifications(!showNotifications)}
-                title="Notifications"
+                style={{ padding: "6px 12px", fontSize: "var(--font-size-small)" }}
+                onClick={handleLogout}
               >
-                🔔
-                <span
-                  style={{
-                    position: "absolute",
-                    top: "-4px",
-                    right: "-4px",
-                    backgroundColor: "#DC2626",
-                    color: "#FFFFFF",
-                    fontSize: "0.65rem",
-                    fontWeight: "700",
-                    borderRadius: "50%",
-                    width: "16px",
-                    height: "16px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  3
-                </span>
+                Logout
               </button>
-
-              {showNotifications && (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "42px",
-                    width: "280px",
-                    backgroundColor: "#FFFFFF",
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                    padding: "0.75rem",
-                    zIndex: 100,
-                  }}
-                >
-                  <strong style={{ fontSize: "0.85rem", color: "var(--midnight-indigo)" }}>
-                    System Notifications
-                  </strong>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        style={{
-                          padding: "0.4rem 0.5rem",
-                          backgroundColor: "var(--soft-vanilla)",
-                          borderRadius: "4px",
-                          fontSize: "0.75rem",
-                        }}
-                      >
-                        <div style={{ fontWeight: "600", color: "var(--midnight-indigo)" }}>{n.title}</div>
-                        <div style={{ color: "var(--secondary-text)" }}>{n.desc}</div>
-                        <div style={{ fontSize: "0.65rem", color: "#9CA3AF", marginTop: "0.2rem" }}>{n.time}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Demo Switcher */}
-            <div className="demo-switcher">
-              <span className="switcher-label">Role:</span>
-              <button
-                className={`switch-btn ${role === "STAFF" ? "selected" : ""}`}
-                onClick={() => handleDemoLogin("sales@example.com", "Staff123!")}
-              >
-                Staff (Sales)
-              </button>
-              <button
-                className={`switch-btn ${role === "CUSTOMER" ? "selected" : ""}`}
-                onClick={() => handleDemoLogin("acme@corp.com", "Customer123!")}
-              >
-                Customer (Acme)
-              </button>
-              <button
-                className={`switch-btn ${role === "ADMIN" ? "selected" : ""}`}
-                onClick={() => handleDemoLogin("admin@example.com", "Admin123!")}
-              >
-                Admin
-              </button>
-              {user && (
-                <button className="switch-btn logout-btn" onClick={handleLogout}>
-                  Logout
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </header>
 
@@ -436,7 +350,7 @@ function DashboardLayout() {
                   className="btn-primary"
                   style={{ display: "inline-block", textDecoration: "none" }}
                 >
-                  Launch Django Admin Portal ↗
+                  Launch Django Admin Portal
                 </a>
               </div>
             </ProtectedRoute>
@@ -452,11 +366,13 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Auth pages */}
-          <Route path="/login"    element={<LoginPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-
-          {/* Everything else — the full dashboard */}
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          <Route path="/dashboard/*" element={<DashboardLayout />} />
+          <Route path="/admin/*" element={<DashboardLayout />} />
+          <Route path="/portal/*" element={<DashboardLayout />} />
+          <Route path="/" element={<DashboardLayout />} />
           <Route path="*" element={<DashboardLayout />} />
         </Routes>
       </AuthProvider>
